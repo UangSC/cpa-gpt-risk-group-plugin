@@ -124,40 +124,23 @@ body {
 }
 
 /* Dark theme keeps the same glass structure, only cooler. */
-[data-theme='dark'] .toolbar,
-[data-theme='dark'] .stat,
-[data-theme='dark'] .cred-table,
-[data-theme='dark'] .cred-tile,
-[data-theme='dark'] .pool,
-[data-theme='dark'] .pool-card,
-[data-theme='dark'] .panel,
-[data-theme='dark'] .history-item {
+[data-downshift-theme='dark'] .toolbar,
+[data-downshift-theme='dark'] .stat,
+[data-downshift-theme='dark'] .cred-table,
+[data-downshift-theme='dark'] .cred-tile,
+[data-downshift-theme='dark'] .pool,
+[data-downshift-theme='dark'] .pool-card,
+[data-downshift-theme='dark'] .panel,
+[data-downshift-theme='dark'] .history-item {
   backdrop-filter: saturate(140%) blur(14px);
   -webkit-backdrop-filter: saturate(140%) blur(14px);
 }
 
-[data-theme='dark'] .cred-tile,
-[data-theme='dark'] .pool-card {
+[data-downshift-theme='dark'] .cred-tile,
+[data-downshift-theme='dark'] .pool-card {
   box-shadow: 0 20px 44px -30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 /* ------------------------------------------ glass polish + card foot status */
-
-/* Stronger frost: a visible sheen over the pastel canvas rather than a flat panel. */
-.cred-tile::after,
-.pool-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.06) 38%, transparent 62%);
-  opacity: 0.9;
-}
-
-[data-theme='dark'] .cred-tile::after,
-[data-theme='dark'] .pool-card::after {
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.1), transparent 46%);
-}
 
 .cred-tile > *,
 .pool-card > * {

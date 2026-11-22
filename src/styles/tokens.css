@@ -1,4 +1,4 @@
-/* Design tokens. Light is the default; `[data-theme='dark']` on <html> flips the palette. */
+/* Design tokens. Light is the default; `[data-downshift-theme='dark']` on <html> flips the palette. */
 
 :root {
   color-scheme: light;
@@ -80,7 +80,7 @@
   --page-max: 1840px;
 }
 
-[data-theme='dark'] {
+[data-downshift-theme='dark'] {
   color-scheme: dark;
 
   --bg: #0e1015;

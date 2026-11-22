@@ -42,7 +42,7 @@ export default function App() {
   const setRunPanel = useStore((s) => s.setRunPanel)
   const updateSettings = useStore((s) => s.updateSettings)
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme
+    document.documentElement.dataset.downshiftTheme = settings.theme
   }, [settings.theme])
 
   // Blur is a document-level flag so names stay blurred in every view and overlay.

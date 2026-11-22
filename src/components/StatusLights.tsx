@@ -2,9 +2,9 @@ import type { InspectionRound, Target } from '../types'
 import { formatClock, formatDuration, formatRelative } from '../lib/format'
 import { lightSequence, roundTone } from '../lib/derive'
 import { countRetries, REASON_LABEL, testLabel } from '../lib/rules'
+import { inspectionResultReason } from '../lib/inspectionResult'
+import { STATUS_TOOLTIP_DELAY_MS } from '../lib/tooltipInteraction'
 import { Dot, HoverCard } from './ui'
-
-const LIGHT_TOOLTIP_DELAY_MS = 120
 
 const OUTCOME_LABEL = {
   normal: '正常',
@@ -50,7 +50,7 @@ function RoundTip({ round }: { round: InspectionRound }) {
       <div className="tip-row">
         <span className="tip-k">原因</span>
         <span className="tip-v">
-          {REASON_LABEL[round.reasonCode]} — {round.reason}
+          {inspectionResultReason(round) ?? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${round.reason}`}
         </span>
       </div>
       {round.evidence.serviceError && (
@@ -109,7 +109,7 @@ export function StatusLights({
     // lives in a hover bubble instead of inline text pushing the strip off-centre.
     return (
       <div className="lights lights-is-empty" role="group" aria-label="近期检测状态：暂无记录">
-        <HoverCard showDelay={LIGHT_TOOLTIP_DELAY_MS} fadeOnHide={false}
+        <HoverCard showDelay={STATUS_TOOLTIP_DELAY_MS} fadeOnHide={false}
           content={
             <>
               <div className="tip-title">暂无检测记录</div>
@@ -125,6 +125,7 @@ export function StatusLights({
           <button
             type="button"
             className="light light-empty is-placeholder"
+            onClick={(event) => event.stopPropagation()}
             aria-label="暂无检测记录，悬停查看说明"
           />
         </HoverCard>
@@ -140,7 +141,7 @@ export function StatusLights({
       {rounds.map((round) => {
         const tone = roundTone(round)
         return (
-          <HoverCard showDelay={LIGHT_TOOLTIP_DELAY_MS} fadeOnHide={false}
+          <HoverCard showDelay={STATUS_TOOLTIP_DELAY_MS} fadeOnHide={false}
             key={round.id}
             content={<RoundTip round={round} />}
           >

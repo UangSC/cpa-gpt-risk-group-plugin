@@ -2,10 +2,29 @@ import { useEffect, useState } from 'react'
 import { roundTone } from '../lib/derive'
 import { formatClock } from '../lib/format'
 import { RUN_STATE_LABEL, type HistoryBatchEntry } from '../lib/historyBatches'
+import { inspectionResult } from '../lib/inspectionResult'
 import { REASON_LABEL, testLabel } from '../lib/rules'
+import type { InspectionRound } from '../types'
 import { Chip, Dot, PlanMark, SecretName, type ChipTone } from './ui'
 
 const stateTone = (state: string): ChipTone => state === 'running' ? 'accent' : state === 'waiting' || state === 'retrying' ? 'uncertain' : state === 'failed' ? 'downshift' : 'plain'
+
+function RoundDescription({ round, targetModel, fallback }: { round: InspectionRound; targetModel: string; fallback: string }) {
+  const result = inspectionResult(round)
+  if (result?.kind === 'fingerprint') {
+    return <span className="inspection-fingerprint-result">
+      <span>三次模型指纹归因完成，目标为 <strong>{targetModel}</strong></span>
+      <span>当前概率 {(result.probability * 100).toFixed(2)}% 为：<strong>{result.model}</strong></span>
+    </span>
+  }
+  if (result?.kind === 'candy') {
+    return <>巡检成功：{result.answer == null ? '未提取到数字答案' : <code className="inspection-answer">{`{"ANSWER": ${result.answer}}`}</code>}</>
+  }
+  if (result?.kind === 'request-error' && result.method === 'candy') {
+    return <strong className="inspection-request-error">巡检失败：{result.status == null ? '请求异常' : `错误码 ${result.status}`}</strong>
+  }
+  return fallback
+}
 
 function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: number; recent: boolean }) {
   const { round, item, target, credential } = entry
@@ -17,11 +36,10 @@ function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: n
   const model = target?.model ?? entry.targetId.split('::').at(-1) ?? '未知模型'
   const fallback = item?.state === 'done' ? '检测已完成，详细证据不在当前保留历史中' : item?.state === 'skipped' ? '本次已跳过此凭证'
     : item?.state === 'cancelled' ? '该凭证检测已取消' : item?.state === 'failed' ? '本次未取得完整检测结果' : '等待完整检测结果'
-  const note = round ? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${round.reason}` : item?.note ?? fallback
+  const requesting = item?.state === 'running' && item.attempt > 0
+  const note = round ? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${round.reason}` : requesting ? '' : item?.note ?? fallback
   const retryTime = item?.retryAt ? Date.parse(item.retryAt) : NaN
   const retrySeconds = item?.state === 'retrying' && Number.isFinite(retryTime) ? Math.max(0, Math.ceil((retryTime - now) / 1000)) : null
-  const lastStatus = typeof item?.lastStatus === 'number' && item.lastStatus >= 100 ? `最近 HTTP ${item.lastStatus}`
-    : item?.lastStatus === 'network-error' ? '最近网络错误' : null
   const testNames = round ? testLabel(round.tests) : item?.currentTest ? testLabel([item.currentTest]) : null
   const modelParts = /^gpt-(\d+(?:\.\d+)*)(?:-(sol|astra|terra))?$/i.exec(model)
   const modelFamily = modelParts?.[2]
@@ -44,15 +62,14 @@ function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: n
         {!recent && <><Chip tone={statusTone}>{label}</Chip>{badges}</>}
       </span>
       <span className={recent ? 'recent-entry-result' : undefined}><span className="history-sub">{recent
-        ? <>{badges}{note}</>
-        : <><span className="mono">{model}</span> · {note}</>}</span></span>
+        ? <>{badges}{round ? <RoundDescription round={round} targetModel={model} fallback={note} /> : note}</>
+        : <><span className="mono">{model}</span>{note && ` · ${note}`}</>}</span></span>
     </span>
     <span className="history-side">
       {round ? <time dateTime={round.finishedAt}>{formatClock(round.finishedAt).slice(0, 5)}</time>
-        : <><span>{item?.attempt ? `第 ${item.attempt} 次请求` : '尚未发起请求'}</span>
-          {lastStatus && <span>{lastStatus}</span>}
-          {retrySeconds != null && <span>{retrySeconds > 0 ? `等待 ${retrySeconds} 秒后重试` : '即将重试'}</span>}
-        </>}
+        : requesting ? <strong className="inspection-request-progress">第 {item.attempt} 次请求中</strong>
+          : retrySeconds != null ? <span>{retrySeconds > 0 ? `等待 ${retrySeconds} 秒后重试` : '即将重试'}</span>
+            : !item?.attempt ? <span>尚未发起请求</span> : null}
     </span>
   </>
 }

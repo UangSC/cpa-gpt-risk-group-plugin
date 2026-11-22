@@ -3,7 +3,13 @@ package classifier
 import (
 	"context"
 	"strings"
+
+	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
 )
+
+func excludedFromInspection(credential cpa.Credential, record *Record) bool {
+	return credential.Disabled || (record != nil && record.InspectionExcluded)
+}
 
 // SetExclusions 只改变插件的巡检范围，不触碰 CPA 凭证字段或历史依据。
 func (s *Service) SetExclusions(ctx context.Context, ids []string, excluded bool) error {
@@ -23,13 +29,17 @@ func (s *Service) SetExclusions(ctx context.Context, ids []string, excluded bool
 	if err != nil {
 		return err
 	}
-	known := map[string]bool{}
+	known := map[string]cpa.Credential{}
 	for _, c := range live {
-		known[c.ID] = true
+		known[c.ID] = c
 	}
 	for id := range selected {
-		if !known[id] {
+		c, ok := known[id]
+		if !ok {
 			return &apiError{404, "Codex 凭证不存在或已移除"}
+		}
+		if !excluded && c.Disabled {
+			return &apiError{409, "该凭证已在 CPA 停用，请先在 CPA 启用"}
 		}
 	}
 	s.mu.Lock()

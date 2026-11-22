@@ -76,7 +76,9 @@ export function Overview({ onOpenDetail }: { onOpenDetail: (targetId: string, ro
   const state = useStore()
   const now = useNow(30_000)
   const { settings, targets, credentials, filters, selected } = state
-  const participating = useMemo(() => credentials.filter((credential) => !credential.inspectionExcluded || state.excluding.includes(credential.id)), [credentials, state.excluding])
+  const participating = useMemo(() => credentials.filter((credential) =>
+    !credential.disabled && (!credential.inspectionExcluded || state.excluding.includes(credential.id))
+  ), [credentials, state.excluding])
   const excludedCount = credentials.filter((credential) => credential.inspectionExcluded).length
   const participatingSelected = selected.filter((id) => participating.some((credential) => credential.id === id))
 

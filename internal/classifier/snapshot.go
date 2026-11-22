@@ -44,9 +44,6 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		if auth == "" {
 			auth = "valid"
 		}
-		if c.Disabled {
-			auth = "expired"
-		}
 		availability := c.Availability
 		if availability == "" {
 			availability = "unknown"
@@ -66,7 +63,14 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			quota.Status = "unknown"
 		}
 		group, syncRecord := reconcile(c, r, out.Settings, strategy)
-		out.Credentials = append(out.Credentials, Credential{c.ID, c.Name, c.File, c.Plan, auth, availability, c.BusySessions, quota, models, group, syncRecord, RoutingValues{c.Priority, c.Weight}, c.Unavailable, c.Prefix, r.InspectionExcluded, r.ExcludedAt})
+		out.Credentials = append(out.Credentials, Credential{
+			ID: c.ID, Name: c.Name, File: c.File, Plan: c.Plan, Auth: auth,
+			Availability: availability, BusySessions: c.BusySessions, Quota: quota,
+			Models: models, Group: group, Sync: syncRecord,
+			Routing: RoutingValues{c.Priority, c.Weight}, Disabled: c.Disabled,
+			Unavailable: c.Unavailable, Prefix: c.Prefix,
+			InspectionExcluded: excludedFromInspection(c, r), ExcludedAt: r.ExcludedAt,
+		})
 		model := out.Settings.InspectionModel
 		tid := targetID(c.ID, model)
 		target, ok := r.Targets[model]

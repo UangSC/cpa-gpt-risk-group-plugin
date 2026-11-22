@@ -2,17 +2,15 @@
 :root {
   --frost-fill: rgba(255, 255, 255, 0.32);
   --frost-sheen: rgba(255, 255, 255, 0.23);
-  --frost-base-sheen: rgba(255, 255, 255, 0.06);
   --frost-border: rgba(255, 255, 255, 0.72);
   --frost-rim: rgba(255, 255, 255, 0.8);
   --frost-bottom-rim: rgba(75, 112, 143, 0.14);
   --frost-shadow: 0 2px 5px rgba(36, 67, 89, 0.08), 0 10px 24px -14px rgba(36, 67, 89, 0.24);
 }
 
-[data-theme='dark'] {
+[data-downshift-theme='dark'] {
   --frost-fill: rgba(26, 38, 54, 0.74);
   --frost-sheen: rgba(181, 205, 239, 0.09);
-  --frost-base-sheen: rgba(181, 205, 239, 0.02);
   --frost-border: rgba(156, 182, 214, 0.2);
   --frost-rim: rgba(204, 223, 248, 0.22);
   --frost-bottom-rim: rgba(0, 0, 0, 0.34);
@@ -21,39 +19,26 @@
 
 :root body .pool {
   background: color-mix(in srgb, var(--glass) 28%, transparent);
-  backdrop-filter: blur(8px) saturate(125%);
   -webkit-backdrop-filter: blur(8px) saturate(125%);
+  backdrop-filter: blur(8px) saturate(125%);
 }
 
-:root body .cred-tile,
-:root body .pool-card {
+:root body :is(.cred-tile, .pool-card, .excluded-credential) {
   background:
-    radial-gradient(140px 95px at 100% 0%, color-mix(in srgb, var(--tone-dot, var(--neutral-dot)) 8%, transparent), transparent 75%),
-    linear-gradient(145deg, var(--frost-base-sheen), transparent 55%),
-    var(--frost-fill);
+    linear-gradient(145deg, var(--frost-sheen), transparent 55%),
+    var(--frost-fill) url('../assets/textures/frosted-glass.svg');
   border: 1px solid var(--frost-border);
-  backdrop-filter: blur(20px) saturate(145%);
   -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
   box-shadow: var(--frost-shadow), inset 0 1px 0 var(--frost-rim), inset 0 -1px 0 var(--frost-bottom-rim);
 }
 
-:root body .cred-tile::after,
-:root body .pool-card::after {
-  background-image: linear-gradient(145deg, var(--frost-sheen), transparent 52%), url('../assets/textures/frosted-glass.svg');
-  background-size: 100% 100%, 128px 128px;
-  opacity: 1;
-  z-index: 0;
-  pointer-events: none;
-}
-
-:root body .cred-tile:hover,
-:root body .pool-card:hover {
+:root body :is(.cred-tile, .pool-card, .excluded-credential):hover {
   border-color: color-mix(in srgb, var(--frost-border) 75%, var(--accent));
   box-shadow: var(--frost-shadow), 0 4px 12px -8px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 var(--frost-rim);
 }
 
-:root body .cred-tile.is-selected,
-:root body .pool-card.is-selected {
+:root body :is(.cred-tile, .pool-card, .excluded-credential).is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 26%, transparent), var(--frost-shadow), inset 0 1px 0 var(--frost-rim);
 }

@@ -188,7 +188,7 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	for _, c := range live {
 		s.mu.Lock()
 		r := s.recordLocked(c.ID)
-		if r.InspectionExcluded {
+		if excludedFromInspection(c, r) {
 			s.mu.Unlock()
 			continue
 		}

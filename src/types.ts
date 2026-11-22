@@ -213,6 +213,7 @@ export interface Credential {
   /** `busy` means the credential currently serves live sessions; checks wait for it. */
   availability: 'idle' | 'busy' | 'unknown'
   /** CPA 官方报告的暂不可用或冷却，不等同于令牌失效。 */
+  disabled?: boolean
   unavailable?: boolean
   busySessions: number
   quota: Quota

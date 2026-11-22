@@ -115,6 +115,7 @@ type Credential struct {
 	Group              *string       `json:"group"`
 	Sync               Sync          `json:"sync"`
 	Routing            RoutingValues `json:"routing"`
+	Disabled           bool          `json:"disabled,omitempty"`
 	Unavailable        bool          `json:"unavailable,omitempty"`
 	Prefix             string        `json:"prefix"`
 	InspectionExcluded bool          `json:"inspectionExcluded"`

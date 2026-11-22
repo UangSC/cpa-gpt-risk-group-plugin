@@ -1,5 +1,4 @@
 import { type CredentialView } from '../../lib/derive'
-import { cardIdentityAttributes } from '../../lib/cardIdentity'
 
 /* ------------------------------------------------------------------- card */
 
@@ -10,7 +9,6 @@ export function SelectableCard({
   children,
   testId,
   credentialId,
-  identity,
 }: {
   selected: boolean
   onToggle: () => void
@@ -18,11 +16,9 @@ export function SelectableCard({
   children: React.ReactNode
   testId?: string
   credentialId?: string
-  identity?: ReturnType<typeof cardIdentityAttributes>
 }) {
   return (
     <div
-      {...identity}
       role="button"
       tabIndex={0}
       aria-pressed={selected}

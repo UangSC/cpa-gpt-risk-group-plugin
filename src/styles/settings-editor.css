@@ -37,14 +37,14 @@
 .cred-row, .cred-tile, .pool-card { --edge-glow: var(--tone-dot, var(--neutral-dot)); }
 .cred-row::before, .cred-tile::before, .pool-card::before { box-shadow: 0 0 5px color-mix(in srgb, var(--edge-glow) 48%, transparent), 0 0 12px color-mix(in srgb, var(--edge-glow) 22%, transparent); }
 .cred-row:hover::before, .cred-tile:hover::before, .pool-card:hover::before { box-shadow: 0 0 7px color-mix(in srgb, var(--edge-glow) 66%, transparent), 0 0 16px color-mix(in srgb, var(--edge-glow) 32%, transparent); }
-[data-theme='dark'] .tip { background: var(--surface-2); border-color: var(--border-strong); color: var(--text); }
-[data-theme='dark'] .btn-primary { background: var(--accent); color: #111a2b; }
-[data-theme='dark'] .btn-primary:hover { background: var(--accent-hover); color: #111a2b; }
-[data-theme='dark'] .checkbox:checked::after,
-[data-theme='dark'] .checkbox:indeterminate::after { background-color: var(--text-inverse); }
-[data-theme='dark'] .light-normal { --lamp-color: #3cba91; }
-[data-theme='dark'] .light-uncertain { --lamp-color: #dbaa52; }
-[data-theme='dark'] .light-downshift { --lamp-color: #db8074; }
+[data-downshift-theme='dark'] .tip { background: var(--surface-2); border-color: var(--border-strong); color: var(--text); }
+[data-downshift-theme='dark'] .btn-primary { background: var(--accent); color: #111a2b; }
+[data-downshift-theme='dark'] .btn-primary:hover { background: var(--accent-hover); color: #111a2b; }
+[data-downshift-theme='dark'] .checkbox:checked::after,
+[data-downshift-theme='dark'] .checkbox:indeterminate::after { background-color: var(--text-inverse); }
+[data-downshift-theme='dark'] .light-normal { --lamp-color: #3cba91; }
+[data-downshift-theme='dark'] .light-uncertain { --lamp-color: #dbaa52; }
+[data-downshift-theme='dark'] .light-downshift { --lamp-color: #db8074; }
 .tip.is-pinned { user-select: text; -webkit-user-select: text; }
 .tip.is-selecting-text { opacity: 1; pointer-events: auto; }
 @media (max-width: 600px) { .settings-save-prompt { flex-wrap: wrap; padding: 12px; bottom: 12px; gap: 8px; } .settings-save-copy { flex-basis: calc(100% - 34px); } .settings-save-prompt .btn { margin-left: auto; } }

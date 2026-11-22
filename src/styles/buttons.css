@@ -17,6 +17,15 @@
 }
 :root body .icon-btn { min-width: 34px; width: 34px; height: 34px; padding: 7px; }
 :root body .btn-sm { min-height: 32px; height: 32px; }
+:root body .quota-unknown-button {
+  align-self: flex-start;
+  padding-inline: 9px;
+  gap: 6px;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: var(--border-focus);
+}
+:root body .quota-unknown-button > svg { width: 13px; height: 13px; flex-basis: 13px; }
 :root body :is(.btn-retest, .btn-detail, .btn-exclude, .btn-warn) { gap: 6px; }
 :root body .cred-actions.is-compact .btn {
   min-width: 34px;

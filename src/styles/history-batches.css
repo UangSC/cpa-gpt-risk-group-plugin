@@ -30,12 +30,26 @@
 .inspection-batch-entry .history-sub { white-space: normal; overflow-wrap: anywhere; }
 .inspection-batch-entry .history-side { display: flex; flex-direction: column; gap: 3px; }
 .inspection-batch-entry.is-pending { cursor: default; }
+.inspection-request-progress, .inspection-fingerprint-result strong { color: var(--text); font-weight: 700; }
+.inspection-request-error { color: var(--danger); font-weight: 700; }
+.inspection-answer {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-inset);
+  color: var(--text);
+  font-family: var(--mono);
+}
+.inspection-fingerprint-result,
+.inspection-fingerprint-result > span { display: block; }
 .inspection-batch-summary { font-variant-numeric: tabular-nums; }
 .inspection-batch-more { display: flex; justify-content: center; margin-top: 18px; }
 .inspection-batch-empty { padding: 15px 8px; color: var(--text-3); font-size: 12px; }
 .recent-batch-list .inspection-batch-entry {
   grid-template-columns: 24px minmax(0, 1fr) auto;
-  grid-template-rows: 20px 52px;
+  grid-template-rows: minmax(20px, auto) auto;
   gap: 7px 9px;
 }
 .recent-entry-status { grid-row: 1 / 3; }
@@ -56,17 +70,13 @@
   grid-column: 2 / -1;
   grid-row: 2;
   min-width: 0;
-  height: 52px;
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--surface-2);
-  overflow: hidden;
 }
 .recent-batch-list .history-sub {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
   margin: 0;
   line-height: 19px;
 }

@@ -76,13 +76,13 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 	}
 	participating := candidates[:0]
 	for _, c := range candidates {
-		if r := s.state.Records[c.ID]; r == nil || !r.InspectionExcluded {
+		if !excludedFromInspection(c, s.state.Records[c.ID]) {
 			participating = append(participating, c)
 		}
 	}
 	candidates = participating
 	if len(candidates) == 0 {
-		return "", &apiError{409, "所选凭证均不参与巡检，请先恢复参与"}
+		return "", &apiError{409, "所选凭证均不参与巡检，请检查 CPA 停用状态或恢复参与"}
 	}
 	if s.ctx.Err() != nil {
 		return "", &apiError{409, "插件正在停止"}

@@ -209,8 +209,9 @@ export function HoverCard({
         ref={anchor}
         onMouseEnter={show}
         onMouseLeave={scheduleHide}
-        onFocus={show}
+        onFocus={(event) => { if (event.target.matches(':focus-visible')) show() }}
         onBlur={() => !pinnedRef.current && hideNow()}
+        onClickCapture={pinOnClick ? undefined : hideNow}
         onClick={pinOnClick ? togglePin : undefined}
         data-pinned={pinned ? 'true' : undefined}
         style={{ display: 'inline-flex' }}

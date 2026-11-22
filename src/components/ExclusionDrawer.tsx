@@ -7,7 +7,6 @@ import { activeInspectionCredentialIds, setCredentialExclusions } from '../store
 import { useStore } from '../store/store'
 import { Chip, Drawer, Icon, PlanBadge, QuotaMeter, SecretName, useNow } from './ui'
 import { StatusLights } from './StatusLights'
-import { cardIdentityAttributes } from '../lib/cardIdentity'
 import { isEditingTarget } from '../lib/keyboard'
 
 export function ExclusionIcon() {
@@ -28,7 +27,7 @@ export function ExcludedCredential({ view, selected, onSelect, disabled, now }: 
   const threshold = useStore((state) => state.settings.quota.minRemainingPercent)
   const openDetail = useStore((state) => state.openDetail)
   const updating = useStore((state) => state.excluding.includes(credential.id))
-  return <article className={`excluded-credential tone-${view.verdict} ${selected ? 'is-selected' : ''}`} {...cardIdentityAttributes(credential.plan)} data-credential-id={credential.id} data-inspection-excluded="true">
+  return <article className={`excluded-credential tone-${view.verdict} ${selected ? 'is-selected' : ''}`} data-credential-id={credential.id} data-inspection-excluded="true">
     <div className="excluded-card-head">
       <label className="excluded-card-selection"><input className="checkbox" type="checkbox" checked={selected} disabled={disabled} onChange={onSelect} aria-label={`选择 ${credential.name} 恢复参与巡检`} /></label>
       <SecretName name={credential.name} className="excluded-card-name" />
@@ -37,8 +36,9 @@ export function ExcludedCredential({ view, selected, onSelect, disabled, now }: 
     <div className="excluded-card-labels">
       <span className="excluded-state"><ExclusionIcon />不参与巡检</span>
       <Chip tone={view.verdict === 'untested' ? 'plain' : view.verdict}>原结论：{VERDICT_LABEL[view.verdict]}</Chip>
+      {credential.disabled && <Chip tone="uncertain">CPA 已停用</Chip>}
       {credential.auth === 'expired' && <Chip tone="downshift">认证失效</Chip>}
-      {credential.unavailable && <Chip tone="uncertain">暂不可用</Chip>}
+      {!credential.disabled && credential.unavailable && <Chip tone="uncertain">暂不可用</Chip>}
       {credential.sync.status === 'failed' && <Chip tone="uncertain">配置待同步</Chip>}
     </div>
     <div className="excluded-card-history">
@@ -57,7 +57,7 @@ export function ExcludedCredential({ view, selected, onSelect, disabled, now }: 
     </div>
     <div className="excluded-card-prefix"><span>当前前缀</span><code>{typeof credential.prefix === 'string' ? credential.prefix || '无前缀' : '未知'}</code></div>
     <div className="excluded-card-foot">
-      <span className="excluded-secondary">{credential.excludedAt ? `${formatRelative(credential.excludedAt, now)}移入` : '已从巡检范围排除'}</span>
+      <span className="excluded-secondary">{credential.disabled ? '请先在 CPA 启用' : credential.excludedAt ? `${formatRelative(credential.excludedAt, now)}移入` : '已从巡检范围排除'}</span>
       {view.target && <button type="button" className="btn btn-sm btn-ghost" onClick={() => openDetail(view.target!.id, view.target!.rounds[0]?.id ?? null)}>查看依据</button>}
       <button type="button" className="btn btn-sm excluded-restore" disabled={disabled} onClick={() => void setCredentialExclusions([credential.id], false)} aria-label={`恢复 ${credential.name} 参与巡检`}>
         <Icon.Refresh />{updating ? '恢复中' : '恢复参与'}
@@ -89,13 +89,14 @@ export function ExclusionDrawer() {
     return views.filter(({ credential }) => !query || [credential.name, credential.file, ...credential.models].join(' ').toLowerCase().includes(query))
   }, [views, search])
   const busyIds = useMemo(() => activeInspectionCredentialIds({ tasks, targets }), [tasks, targets])
-  const disabledFor = (credential: Credential) => connection !== 'connected' || starting || excluding.includes(credential.id) || syncing.includes(credential.id) || busyIds.includes(credential.id)
+  const disabledFor = (credential: Credential) => credential.disabled || connection !== 'connected' || starting || excluding.includes(credential.id) || syncing.includes(credential.id) || busyIds.includes(credential.id)
   const restorable = filtered.filter((view) => !disabledFor(view.credential))
-  const chosen = selected.filter((id) => excluded.some((credential) => credential.id === id))
+  const manualPool = excluded.filter((credential) => !credential.disabled)
+  const chosen = selected.filter((id) => manualPool.some((credential) => credential.id === id))
   const restoreChosen = chosen.filter((id) => excluded.some((credential) => credential.id === id && !disabledFor(credential)))
   const allChecked = !!restorable.length && restorable.every((view) => chosen.includes(view.credential.id))
-  const canRestoreAll = !!excluded.length && excluded.every((credential) => !disabledFor(credential))
-  useEffect(() => { setSelected((current) => current.filter((id) => excluded.some((credential) => credential.id === id))) }, [excluded])
+  const canRestoreAll = !!manualPool.length && manualPool.every((credential) => !disabledFor(credential))
+  useEffect(() => { setSelected((current) => current.filter((id) => excluded.some((credential) => credential.id === id && !credential.disabled))) }, [excluded])
   const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
   return <Drawer open={open} onClose={() => close(false)} title="不参与巡检"
     onEscape={(event) => {
@@ -103,7 +104,7 @@ export function ExclusionDrawer() {
       setSelected([])
       return true
     }}
-    sub="这些凭证不参加手动、批量或定时巡检，仍可用于 CPA 正常请求。"
+    sub="这里显示在 CPA 停用或手动排除的凭证，均不参加手动、批量或定时巡检。"
     className="exclusion-drawer"
     head={<span className="exclusion-drawer-count">{excluded.length}</span>}>
     <div className="exclusion-drawer-content">
@@ -121,7 +122,7 @@ export function ExclusionDrawer() {
         <div><strong>{chosen.length ? `已选择 ${chosen.length} 个` : '恢复后回到原分类'}</strong><span>恢复参与不会自动开始巡检。</span></div>
         <div className="exclusion-footer-actions">
           {chosen.length > 0 && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setSelected([])}>清除选择</button>}
-          <button type="button" className="btn btn-sm" disabled={!canRestoreAll} onClick={() => void setCredentialExclusions(excluded.map((credential) => credential.id), false)}>全部恢复</button>
+          <button type="button" className="btn btn-sm" disabled={!canRestoreAll} onClick={() => void setCredentialExclusions(manualPool.map((credential) => credential.id), false)}>全部恢复</button>
           <button type="button" className="btn btn-primary btn-sm" disabled={!restoreChosen.length} onClick={() => void setCredentialExclusions(restoreChosen, false)}>恢复已选 <span>{restoreChosen.length}</span></button>
         </div>
       </div>

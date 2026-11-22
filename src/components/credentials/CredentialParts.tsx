@@ -1,7 +1,9 @@
 import { type Settings } from '../../types'
 import { lastRound, lowestQuota, statusOf, type StatusKey, type CredentialView } from '../../lib/derive'
+import { STATUS_TOOLTIP_DELAY_MS } from '../../lib/tooltipInteraction'
 import { Chip, HoverCard, Icon, QuotaMeter } from '../ui'
 import { useStore } from '../../store/store'
+import { refreshCredentialsQuota } from '../../store/actions'
 import { ExclusionIcon } from '../ExclusionDrawer'
 
 /**
@@ -48,12 +50,18 @@ export function StatusPill({ view, size }: { view: CredentialView; size?: 'sm' }
     <Tag type={interactive ? 'button' : undefined}
       className={`verdict verdict-${key} status-pill ${size === 'sm' ? 'is-sm' : ''}`}
       aria-label={interactive ? `${STATUS_TEXT[key]}状态说明` : undefined}
+      onClick={interactive ? stop : undefined}
     >
       <span className={`dot dot-${key === 'unknown' ? 'uncertain' : key === 'error' ? 'downshift' : key}`} aria-hidden="true" />
       {STATUS_TEXT[key]}
     </Tag>
   )
-  return interactive ? <HoverCard pinOnClick hideDelay={150} content={<><div className="tip-title">{STATUS_TEXT[key]}状态说明</div><p>{detail}</p></>}>{pill}</HoverCard> : pill
+  return interactive
+    ? <HoverCard showDelay={STATUS_TOOLTIP_DELAY_MS} fadeOnHide={false}
+        content={<><div className="tip-title">{STATUS_TEXT[key]}状态说明</div><p>{detail}</p></>}>
+        {pill}
+      </HoverCard>
+    : pill
 }
 
 export function GroupCell({ view, settings }: { view: CredentialView; settings: Settings }) {
@@ -69,10 +77,26 @@ export function GroupCell({ view, settings }: { view: CredentialView; settings: 
   </div></div>
 }
 
-export function QuotaCell({ view, settings }: { view: CredentialView; settings: Settings }) {
+function UnknownQuotaButton({ credentialId }: { credentialId: string }) {
+  const disabled = useStore((state) => state.connection !== 'connected' || state.quotaRefreshing.length > 0)
+  const refreshing = useStore((state) => state.quotaRefreshing.includes(credentialId))
+  return <button type="button" className="btn btn-sm quota-unknown-button"
+    aria-description="点击刷新此凭证的额度" aria-busy={refreshing} disabled={disabled}
+    onClick={(event) => { stop(event); void refreshCredentialsQuota([credentialId]) }}>
+    <Icon.Refresh />
+    {refreshing ? '刷新中…' : '额度未知'}
+  </button>
+}
+
+export function QuotaCell({ view, settings, refreshUnknown = false }: {
+  view: CredentialView; settings: Settings; refreshUnknown?: boolean
+}) {
   const lowest = lowestQuota(view.credential)
   const exhausted = view.credential.quota.status === 'exhausted'
   const blocked = lowest != null && lowest <= settings.quota.minRemainingPercent
+  if (refreshUnknown && !exhausted && lowest == null) {
+    return <div className="quota-cell"><UnknownQuotaButton credentialId={view.credential.id} /></div>
+  }
   return (
     <div className="quota-cell" data-quota-empty={view.credential.quota.windows.length === 0 ? 'true' : undefined}>
       <QuotaMeter windows={view.credential.quota.windows} threshold={settings.quota.minRemainingPercent} />

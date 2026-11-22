@@ -3,7 +3,6 @@ import { lowestQuota, type CredentialView } from '../../lib/derive'
 import { Chip, Icon, PlanMark, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { cardIdentityAttributes } from '../../lib/cardIdentity'
 import { type CredentialRuntime, StatusPill, QuotaCell, Actions } from './CredentialParts'
 import { SelectableCard, cardNote } from './SelectableCard'
 
@@ -18,16 +17,13 @@ export function CredentialGrid({ views, runtime }: { views: CredentialView[]; ru
         const gateNote =
           view.credential.quota.status === 'exhausted'
             ? '额度不足'
-            : lowest == null
-              ? '额度未知'
-              : lowest <= runtime.settings.quota.minRemainingPercent
-                ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
-                : null
+            : lowest != null && lowest <= runtime.settings.quota.minRemainingPercent
+              ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
+              : null
         return (
           <SelectableCard
             key={view.credential.id}
             credentialId={view.credential.id}
-            identity={cardIdentityAttributes(view.credential.plan)}
             selected={selected}
             onToggle={() => selection.toggle(view.credential.id)}
             className={`cred-tile tone-${view.verdict}`}
@@ -78,7 +74,7 @@ export function CredentialGrid({ views, runtime }: { views: CredentialView[]; ru
             </div>
 
             <div className="tile-quota">
-              <QuotaCell view={view} settings={runtime.settings} />
+              <QuotaCell view={view} settings={runtime.settings} refreshUnknown />
             </div>
 
             <div className={`tile-reason ${view.attention.length > 0 && !view.reason ? 'is-attention' : ''}`}>

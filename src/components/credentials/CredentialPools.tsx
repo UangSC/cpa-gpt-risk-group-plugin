@@ -4,7 +4,6 @@ import { lowestQuota, type CredentialView } from '../../lib/derive'
 import { Chip, Icon, PlanBadge, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { cardIdentityAttributes } from '../../lib/cardIdentity'
 import { type CredentialRuntime, StatusPill, QuotaCell, Actions } from './CredentialParts'
 import { SelectableCard } from './SelectableCard'
 import { CredentialPager, credentialPage } from './CredentialPager'
@@ -19,15 +18,12 @@ function PoolCard({ view, runtime }: { view: CredentialView; runtime: Credential
   const gateNote =
     view.credential.quota.status === 'exhausted'
       ? '额度不足'
-      : lowest == null
-        ? '额度未知'
-        : lowest <= runtime.settings.quota.minRemainingPercent
-          ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
-          : null
+      : lowest != null && lowest <= runtime.settings.quota.minRemainingPercent
+        ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
+        : null
   return (
     <SelectableCard
       credentialId={view.credential.id}
-      identity={cardIdentityAttributes(view.credential.plan)}
       selected={selected}
       onToggle={() => selection.toggle(view.credential.id)}
       className={`pool-card tone-${view.verdict}`}
@@ -67,7 +63,7 @@ function PoolCard({ view, runtime }: { view: CredentialView; runtime: Credential
       </div>
 
       <div className="pool-card-quota">
-        <QuotaCell view={view} settings={runtime.settings} />
+        <QuotaCell view={view} settings={runtime.settings} refreshUnknown />
       </div>
 
       <div className="pool-card-foot">
@@ -110,7 +106,7 @@ function PoolColumn({
         {note && <span className="pool-note">{note}</span>}
         <span className="pool-count">{count}</span>
       </header>
-      <div className="pool-body" style={{ '--pool-page-rows': Math.ceil(pageSize / 2), '--pool-page-size': pageSize } as React.CSSProperties}>
+      <div className="pool-body" style={{ '--pool-page-size': current.size } as React.CSSProperties}>
         {views.length === 0 ? (
           <div className="pool-empty">{emptyText}</div>
         ) : (

@@ -119,6 +119,9 @@ func (s *Service) apply(ctx context.Context, id string, group *string, v Setting
 	if current == nil {
 		return s.failedSync(id, group, v.Routing.Mode, &apiError{404, "Codex 凭证不存在"})
 	}
+	if current.Disabled {
+		return Sync{Mode: v.Routing.Mode, Status: "not-needed"}, &apiError{409, "该凭证已在 CPA 停用，请先在 CPA 启用"}
+	}
 	// 仅优先级模式保留插件接管前的模型前缀，切换策略也可以恢复。
 	s.mu.Lock()
 	originalPrefix := s.recordLocked(id).OriginalPrefix
@@ -196,7 +199,11 @@ func (s *Service) Resync(ctx context.Context, id string) (any, error) {
 	found := false
 	for _, c := range live {
 		if c.ID == id {
+			if c.Disabled {
+				return nil, &apiError{409, "该凭证已在 CPA 停用，请先在 CPA 启用"}
+			}
 			found = true
+			break
 		}
 	}
 	if !found {

@@ -12,7 +12,7 @@ import (
 )
 
 const pluginID = "cpa-codex-downshift-classifier"
-const version = "0.1.3"
+const version = "0.1.5"
 const apiPrefix = "/v0/management/plugins/" + pluginID
 const resourcePrefix = "/v0/resource/plugins/" + pluginID
 

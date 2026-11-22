@@ -1,7 +1,7 @@
 {
   "name": "cpa-codex-downshift-classifier",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "通过 CPA 官方宿主接口检测和分类 Codex 凭证的开发中插件",
   "repository": {
     "type": "git",
