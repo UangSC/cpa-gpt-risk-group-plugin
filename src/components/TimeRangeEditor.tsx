@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent } from 'react'
 import type { ScheduleSettings } from '../types'
 import { adjustWindow, minuteLabel } from '../lib/schedule'
+import { Select } from './ui'
 
 type WindowRange = ScheduleSettings['windows'][number]
 
@@ -20,13 +21,29 @@ function TimeWindow({ value, index, onChange, onRemove }: { value: WindowRange; 
   return <div className={`time-window-row ${dragging ? 'is-dragging' : ''}`}>
     <div className="time-window-head">
       <strong>时间段 {index + 1}</strong>
-      <select aria-label={`时间段 ${index + 1} 开始时间`} value={value.startMinute} onChange={(event) => onChange({ ...value, startMinute: Number(event.target.value) })}>
-        {choices.filter((minute) => minute <= value.endMinute - 15).map((minute) => <option key={minute} value={minute}>{minuteLabel(minute)}</option>)}
-      </select>
+      <Select
+        size="sm"
+        mono
+        ariaLabel={`时间段 ${index + 1} 开始时间`}
+        value={String(value.startMinute)}
+        onChange={(next) => onChange({ ...value, startMinute: Number(next) })}
+        options={choices.filter((minute) => minute <= value.endMinute - 15).map((minute) => ({
+          value: String(minute),
+          label: minuteLabel(minute),
+        }))}
+      />
       <span>至</span>
-      <select aria-label={`时间段 ${index + 1} 结束时间`} value={value.endMinute} onChange={(event) => onChange({ ...value, endMinute: Number(event.target.value) })}>
-        {choices.filter((minute) => minute >= value.startMinute + 15).map((minute) => <option key={minute} value={minute}>{minuteLabel(minute)}</option>)}
-      </select>
+      <Select
+        size="sm"
+        mono
+        ariaLabel={`时间段 ${index + 1} 结束时间`}
+        value={String(value.endMinute)}
+        onChange={(next) => onChange({ ...value, endMinute: Number(next) })}
+        options={choices.filter((minute) => minute >= value.startMinute + 15).map((minute) => ({
+          value: String(minute),
+          label: minuteLabel(minute),
+        }))}
+      />
       <button type="button" className="btn-link" aria-label={`删除时间段 ${index + 1}`} onClick={onRemove}>移除</button>
     </div>
     <div className="time-window-track" ref={track}

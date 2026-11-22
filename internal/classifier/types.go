@@ -1,8 +1,8 @@
 package classifier
 
 import (
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 type RoutingValues struct {
@@ -29,12 +29,15 @@ type Pagination struct {
 const maxStatisticsPageSize = 4
 
 type Schedule struct {
-	Enabled         bool         `json:"enabled"`
-	Mode            string       `json:"mode"`
-	IntervalMinutes int          `json:"intervalMinutes"`
-	DailyTime       string       `json:"dailyTime"`
-	Windows         []TimeWindow `json:"windows"`
-	NextRunAt       *string      `json:"nextRunAt"`
+	Enabled             bool         `json:"enabled"`
+	Mode                string       `json:"mode"`
+	IntervalMinutes     int          `json:"intervalMinutes"`
+	DailyTime           string       `json:"dailyTime"`
+	Windows             []TimeWindow `json:"windows"`
+	BusySessionPolicy   string       `json:"busySessionPolicy,omitempty"`
+	MaxBusySessions     int          `json:"maxBusySessions,omitempty"`
+	MinRemainingPercent *float64     `json:"minRemainingPercent,omitempty"`
+	NextRunAt           *string      `json:"nextRunAt"`
 }
 type Settings struct {
 	Prefixes struct {
@@ -74,12 +77,12 @@ type Settings struct {
 func DefaultSettings() Settings {
 	var s Settings
 	s.Prefixes.Downshift = "downshift"
-	s.Routing = RoutingSettings{Mode: "prefix", Groups: map[string]RoutingValues{"normal": {Priority: 10, Weight: 10}, "downshift": {Priority: -10, Weight: 1}, "ungrouped": {Priority: 0, Weight: 10}}, Overrides: map[string]RoutingValues{}}
+	s.Routing = RoutingSettings{Mode: "none", Groups: map[string]RoutingValues{"normal": {Priority: 10, Weight: 10}, "downshift": {Priority: -10, Weight: 1}, "ungrouped": {Priority: 0, Weight: 10}}, Overrides: map[string]RoutingValues{}}
 	s.InspectionMethod = "candy"
 	s.InspectionModel = "gpt-6.1-sol"
 	s.ReasoningEffort = "low"
 	s.HeaderOverrides = map[string]string{}
-	s.Pagination = Pagination{List: 10, Card: 8, Pool: 4, Statistics: maxStatisticsPageSize}
+	s.Pagination = Pagination{List: 10, Card: 12, Pool: 4, Statistics: maxStatisticsPageSize}
 	s.Retry.MaxRetries = 2
 	s.Retry.BaseDelayMs = 5000
 	s.Retry.BackoffFactor = 2
@@ -90,7 +93,16 @@ func DefaultSettings() Settings {
 	s.Concurrency.MaxObjects = 4
 	s.Layout = "pool"
 	s.Theme = "light"
-	s.Schedule = Schedule{Mode: "interval", IntervalMinutes: 60, DailyTime: "09:00", Windows: []TimeWindow{{"daytime", 540, 1080}}}
+	defaultScheduledQuota := 15.0
+	s.Schedule = Schedule{
+		Mode:                "interval",
+		IntervalMinutes:     60,
+		DailyTime:           "09:00",
+		Windows:             []TimeWindow{{"daytime", 540, 1080}},
+		BusySessionPolicy:   "under-limit",
+		MaxBusySessions:     3,
+		MinRemainingPercent: &defaultScheduledQuota,
+	}
 	return s
 }
 

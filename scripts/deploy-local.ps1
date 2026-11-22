@@ -1,14 +1,15 @@
-param(
+﻿param(
     [Parameter(Mandatory)][string]$CoreDir,
     [string]$ApiBase = 'http://127.0.0.1:8317',
-    [string]$ManagementKey = $env:CPA_DOWNSHIFT_MANAGEMENT_KEY,
+    [string]$ManagementKey = $(if ($env:CPA_RISK_GROUP_MANAGEMENT_KEY) { $env:CPA_RISK_GROUP_MANAGEMENT_KEY } else { $env:CPA_DOWNSHIFT_MANAGEMENT_KEY }),
     [string]$GuiConfig,
     [string]$Artifact
 )
 $ErrorActionPreference = 'Stop'
-$taskPluginId = 'cpa-codex-downshift-classifier'
 $taskRoot = Split-Path -Parent $PSScriptRoot
-$taskVersion = (Get-Content -LiteralPath (Join-Path $taskRoot 'package.json') -Raw | ConvertFrom-Json).version
+$taskPackage = Get-Content -LiteralPath (Join-Path $taskRoot 'package.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$taskPluginId = $taskPackage.name
+$taskVersion = $taskPackage.version
 $taskFileName = $taskPluginId + '-v' + $taskVersion + '.dll'
 if (!$Artifact) { $Artifact = Join-Path $taskRoot ('build\windows\amd64\' + $taskFileName) }
 if ([IO.Path]::GetFileName($Artifact) -ne $taskFileName) { throw '部署产物名称与当前 package.json 版本不匹配。' }
@@ -23,7 +24,7 @@ if (!$ManagementKey -and $GuiConfig) {
     $taskGuiLine = Get-Content -LiteralPath $GuiConfig -Encoding utf8 | Where-Object { $_ -match '^management-secret-key\s*=' } | Select-Object -First 1
     if ($taskGuiLine -match '^management-secret-key\s*=\s*(".*")\s*$') { $ManagementKey = $Matches[1] | ConvertFrom-Json }
 }
-if (!$ManagementKey) { throw '缺少管理密钥，请设置 CPA_DOWNSHIFT_MANAGEMENT_KEY 或指定 -GuiConfig。' }
+if (!$ManagementKey) { throw '缺少管理密钥，请设置 CPA_RISK_GROUP_MANAGEMENT_KEY（兼容 CPA_DOWNSHIFT_MANAGEMENT_KEY）或指定 -GuiConfig。' }
 $taskHandler = [Net.Http.HttpClientHandler]::new()
 $taskHandler.UseProxy = $false; $taskHandler.AllowAutoRedirect = $false
 $taskHttp = [Net.Http.HttpClient]::new($taskHandler)
@@ -48,7 +49,7 @@ try {
     $taskListing = (Invoke-CpaRequest 'GET' '/v0/management/plugins' $null $null).Data
     $taskExistingIds = @($taskListing.plugins | Where-Object registered | ForEach-Object id)
     $taskRead = Invoke-CpaRequest 'GET' '/v8/management/config/plugins/configs' $null $null
-    $taskBackup = Join-Path $taskCore ('backups\downshift-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+    $taskBackup = Join-Path $taskCore ('backups\risk-group-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
     New-Item -ItemType Directory -Path $taskBackup -Force | Out-Null
     Copy-Item -LiteralPath $taskConfig -Destination (Join-Path $taskBackup 'config.yaml')
     Set-Acl -LiteralPath (Join-Path $taskBackup 'config.yaml') -AclObject (Get-Acl -LiteralPath $taskConfig)

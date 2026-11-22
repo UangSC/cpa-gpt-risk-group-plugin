@@ -7,6 +7,15 @@ export function minuteLabel(minute: number): string {
 }
 
 export function scheduleErrors(schedule: ScheduleSettings): string[] {
+  const policy = schedule.busySessionPolicy ?? 'under-limit'
+  if (!['always', 'under-limit', 'skip-busy'].includes(policy)) return ['定时巡检会话策略无效']
+  if (policy === 'under-limit') {
+    const limit = schedule.maxBusySessions ?? 3
+    if (!Number.isInteger(limit) || limit < 1 || limit > 99) return ['并发会话上限应为 1～99 的整数']
+  }
+  if (schedule.minRemainingPercent !== undefined && (!Number.isFinite(schedule.minRemainingPercent) || schedule.minRemainingPercent < 0 || schedule.minRemainingPercent > 100)) {
+    return ['定时巡检额度门槛应为 0～100 的数值']
+  }
   if (!schedule.enabled) return []
   if (schedule.mode !== 'daily' && (!Number.isFinite(schedule.intervalMinutes) || schedule.intervalMinutes < 5)) return ['巡检间隔不能小于 5 分钟']
   if (schedule.mode === 'daily' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.dailyTime)) return ['请填写有效的每日时间']

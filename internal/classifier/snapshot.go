@@ -4,8 +4,8 @@ import (
 	"context"
 	"sort"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
@@ -21,7 +21,11 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	defer s.mu.Unlock()
 	out := Snapshot{Credentials: []Credential{}, Targets: []Target{}, Settings: clone(s.state.Settings), Tasks: clone(s.state.Tasks), Source: "live", SourceDetail: "来自 CPA 官方凭证与运行状态接口；未提供的额度或会话状态显示未知。模型指纹以三次数字挑战与固定参考库计算归因，目标参考概率严格高于 90% 才判正常。定时巡检时区：Asia/Shanghai。", Capabilities: Capabilities{RoutingStrategy: strategy, WeightEditingEnabled: strategy == "weighted-round-robin", FingerprintAvailable: fingerprint.Available(), QuotaRefreshAvailable: s.quotaRefreshAvailable()}}
 	out.ConfigChangesRevision = configurationFingerprint(s.state.Settings, false)
-	out.RequestHeaderProfile = cpa.DefaultRequestHeaderProfile()
+	if provider, ok := s.adapter.(cpa.HeaderProfileProvider); ok {
+		out.RequestHeaderProfile = provider.RequestHeaderProfile(ctx)
+	} else {
+		out.RequestHeaderProfile = cpa.DefaultRequestHeaderProfile()
+	}
 	if s.state.ScheduleConsentRequired {
 		out.SourceDetail += " 未获配置修改授权的旧定时计划已关闭，请重新确认后启用。"
 	}
@@ -69,7 +73,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			Models: models, Group: group, Sync: syncRecord,
 			Routing: RoutingValues{c.Priority, c.Weight}, Disabled: c.Disabled,
 			Unavailable: c.Unavailable, Prefix: c.Prefix,
-			InspectionExcluded: excludedFromInspection(c, r), ExcludedAt: r.ExcludedAt,
+			InspectionExcluded: r.InspectionExcluded, ExcludedAt: r.ExcludedAt,
 		})
 		model := out.Settings.InspectionModel
 		tid := targetID(c.ID, model)
@@ -100,6 +104,9 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 }
 func reconcile(c cpa.Credential, record *Record, settings Settings, _ string) (*string, Sync) {
 	group := record.Group
+	if settings.Routing.Mode == "none" {
+		return group, Sync{Mode: "none", AppliedGroup: group, Status: "not-needed"}
+	}
 	if settings.Routing.Mode == "prefix" {
 		switch {
 		case c.Prefix == settings.Prefixes.Downshift && c.Prefix != "":

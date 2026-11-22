@@ -4,16 +4,29 @@ import { useStore } from './store'
 import { clearPendingManagementKey, currentManagementKey, discardInvalidSessionKey, persistVerifiedManagementKey, setPendingManagementKey } from '../api/auth'
 
 let timer: ReturnType<typeof setTimeout> | null = null
+let visibilityListener: (() => void) | null = null
 let failures = 0
 let pending: Promise<boolean> | null = null
 let stopped = true
 let generation = 0
 
+function clearPollTimer() {
+  if (timer !== null) clearTimeout(timer)
+  timer = null
+}
+
+function detachVisibilityListener() {
+  if (visibilityListener && typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', visibilityListener)
+  }
+  visibilityListener = null
+}
+
 export function stopPolling() {
   stopped = true
   generation++
-  if (timer !== null) clearTimeout(timer)
-  timer = null
+  clearPollTimer()
+  detachVisibilityListener()
 }
 export function refreshSnapshot(force = false): Promise<boolean> {
   if (pending) return force ? pending.then(() => refreshSnapshot(true)) : pending
@@ -44,10 +57,36 @@ export function refreshSnapshot(force = false): Promise<boolean> {
   })()
   return pending
 }
+function pollDelayMs(): number {
+  const hasRunning = useStore.getState().tasks.some((task) => task.status === 'running')
+  if (typeof document !== 'undefined' && document.hidden) {
+    return hasRunning ? 4000 : 15000
+  }
+  return hasRunning ? 1000 : failures ? 2000 : 5000
+}
+
+function attachVisibilityListener() {
+  if (visibilityListener || typeof document === 'undefined') return
+  visibilityListener = () => {
+    if (document.hidden || stopped) return
+    clearPollTimer()
+    void poll(generation)
+  }
+  document.addEventListener('visibilitychange', visibilityListener)
+}
+
 async function poll(currentGeneration: number) {
   if (stopped || currentGeneration !== generation) return
+  if (typeof document !== 'undefined' && document.hidden && !useStore.getState().tasks.some((task) => task.status === 'running')) {
+    clearPollTimer()
+    timer = setTimeout(() => void poll(currentGeneration), pollDelayMs())
+    return
+  }
   if (!useStore.getState().settingsSaving) await refreshSnapshot()
-  if (!stopped && currentGeneration === generation) timer = setTimeout(() => void poll(currentGeneration), useStore.getState().tasks.some((task) => task.status === 'running') ? 1000 : failures ? 2000 : 5000)
+  if (!stopped && currentGeneration === generation) {
+    clearPollTimer()
+    timer = setTimeout(() => void poll(currentGeneration), pollDelayMs())
+  }
 }
 export function reconnect() {
   stopPolling()
@@ -57,6 +96,7 @@ export function reconnect() {
     return
   }
   stopped = false
+  attachVisibilityListener()
   useStore.setState({ connection: 'connecting', connectionError: '' })
   const currentGeneration = generation
   // 旧请求结束后再启动新连接，避免旧地址的状态覆盖手动重连后的来源。
@@ -81,7 +121,9 @@ export async function loginWithKey(key: string, remember: boolean): Promise<bool
   if (remember && !remembered) useStore.getState().notify({ tone: 'warning', title: '已登录', detail: '浏览器未允许记住密钥，本次登录仍可正常使用。' })
   failures = 0
   stopped = false
+  attachVisibilityListener()
   const currentGeneration = generation
-  timer = setTimeout(() => void poll(currentGeneration), 5000)
+  clearPollTimer()
+  timer = setTimeout(() => void poll(currentGeneration), pollDelayMs())
   return true
 }

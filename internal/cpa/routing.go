@@ -68,4 +68,25 @@ func (c *Client) UpdateFields(ctx context.Context, id string, fields Fields) err
 	return c.request(ctx, "PATCH", "/auth-files/fields", body, nil)
 }
 
+func (c *Client) SetDisabled(ctx context.Context, id string, disabled bool) error {
+	if id == "" {
+		return errors.New("凭证标识不能为空")
+	}
+	list, err := c.accounts(ctx)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, a := range list {
+		if a.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.New("Codex 凭证不存在或已移除")
+	}
+	return c.request(ctx, "PATCH", "/auth-files/status", map[string]any{"name": id, "disabled": disabled}, nil)
+}
+
 // parseQuotaSignals uses only explicit window sizes and unexpired reset timestamps.

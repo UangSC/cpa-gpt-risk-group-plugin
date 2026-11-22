@@ -1,5 +1,5 @@
 /**
- * Domain model for the Codex downshift classifier.
+ * Domain model for the Codex risk-group classifier (cpa-gpt-risk-group-plugin).
  *
  * Classification happens at the **credential** level: a Codex account that serves a
  * degraded model serves it for every model name it exposes, so one account is one
@@ -210,7 +210,7 @@ export interface Credential {
   file: string
   plan: string
   auth: 'valid' | 'expired'
-  /** `busy` means the credential currently serves live sessions; checks wait for it. */
+  /** `busy` means the credential currently serves live sessions; scheduled checks apply `busySessionPolicy`. */
   availability: 'idle' | 'busy' | 'unknown'
   /** CPA 官方报告的暂不可用或冷却，不等同于令牌失效。 */
   disabled?: boolean
@@ -302,12 +302,12 @@ export interface PrefixSettings {
 
 export interface RoutingValues {
   priority: number
-  /** CPA 实际继承权重或旧设置兼容值；插件不修改权重。 */
+  /** 读取自 CPA 当前值；加权轮询下可单凭证手动编辑，巡检与分组同步不自动改写权重。 */
   weight: number
 }
 
 export type RoutingGroup = GroupKey | 'ungrouped'
-export type GroupingMode = 'prefix' | 'priority'
+export type GroupingMode = 'none' | 'prefix' | 'priority'
 
 export interface RoutingSettings {
   mode: GroupingMode
@@ -322,6 +322,8 @@ export interface QuotaGate {
   unknownPolicy: 'check' | 'skip'
 }
 
+export type BusySessionPolicy = 'always' | 'under-limit' | 'skip-busy'
+
 export interface ScheduleSettings {
   enabled: boolean
   mode: 'interval' | 'daily' | 'windows'
@@ -329,6 +331,12 @@ export interface ScheduleSettings {
   /** `HH:mm`, local time, only used when `mode === 'daily'`. */
   dailyTime: string
   windows: { id: string; startMinute: number; endMinute: number }[]
+  /** 定时巡检遇到凭证存在活跃会话时的处理策略。 */
+  busySessionPolicy?: BusySessionPolicy
+  /** 策略为 `under-limit` 时，并发会话数严格小于该值才触发巡检（默认 3）。 */
+  maxBusySessions?: number
+  /** 定时巡检独立额度门槛（%）；默认与全局额度门槛一致。 */
+  minRemainingPercent?: number
   /** Populated only while `enabled`; cleared when scheduling is turned off. */
   nextRunAt: string | null
 }
@@ -338,7 +346,7 @@ export interface Settings {
   routing: RoutingSettings
   inspectionMethod: TestKind
   retry: RetryPolicy
-  /** 单轮达到请求阈值，或连续窗口内各轮以 502/503/429 失败时降档。 */
+  /** 单轮达到请求阈值，或连续窗口内各轮以 502/503/429 失败时归为风控。 */
   failureRule: { windowRounds: number; requestThreshold: number }
   quota: QuotaGate
   concurrency: { maxObjects: number }

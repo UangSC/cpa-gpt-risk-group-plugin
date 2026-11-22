@@ -1,17 +1,46 @@
-param(
-    [string]$GoExe = $env:CPA_DOWNSHIFT_GO,
+﻿param(
+    [string]$GoExe = $(if ($env:CPA_RISK_GROUP_GO) { $env:CPA_RISK_GROUP_GO } else { $env:CPA_DOWNSHIFT_GO }),
     [string]$Compiler = $env:CC,
     [ValidateSet('amd64', 'arm64')][string]$Architecture
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
-$taskPackage = Get-Content -LiteralPath (Join-Path $taskRoot 'package.json') -Raw | ConvertFrom-Json
+$taskPackage = Get-Content -LiteralPath (Join-Path $taskRoot 'package.json') -Raw -Encoding utf8 | ConvertFrom-Json
 $taskVersion = $taskPackage.version
+$taskPluginId = $taskPackage.name
 if ($taskVersion -notmatch '^\d+\.\d+\.\d+$') { throw '插件版本必须是标准三段版本号。' }
+if ($taskPluginId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { throw '插件 ID 不符合 CLIProxyAPI 插件规范。' }
 $taskSource = Get-Content -LiteralPath (Join-Path $taskRoot 'cmd/downshift/plugin.go') -Raw -Encoding utf8
-foreach ($taskEntry in @{ pluginID = $taskPackage.name; version = $taskVersion }.GetEnumerator()) {
+foreach ($taskEntry in @{ pluginID = $taskPluginId; version = $taskVersion }.GetEnumerator()) {
     $taskPattern = '(?m)^const ' + $taskEntry.Key + ' = "' + [regex]::Escape($taskEntry.Value) + '"\r?$'
     if ($taskSource -notmatch $taskPattern) { throw ('Go 插件注册的 ' + $taskEntry.Key + ' 与 package.json 不一致。') }
+}
+$taskRegistry = Get-Content -LiteralPath (Join-Path $taskRoot 'store/registry.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$taskStorePlugin = $taskRegistry.plugins[0]
+if ($taskRegistry.schema_version -ne 1 -or $taskStorePlugin.id -ne $taskPluginId) {
+    throw 'store/registry.json 的 schema_version 或插件 ID 与 package.json 不一致。'
+}
+$taskExpectedRepo = [string]$taskStorePlugin.repository
+$taskPackageRepo = ([string]$taskPackage.repository.url) -replace '^git\+', '' -replace '\.git$', ''
+if ($taskPackageRepo -ne $taskExpectedRepo -or $taskSource -notmatch ('"GitHubRepository": "' + [regex]::Escape($taskExpectedRepo) + '"')) {
+    throw 'GitHub 仓库地址在 package.json、store/registry.json 与 Go 注册元数据中不一致。'
+}
+$taskLogoPath = Join-Path $taskRoot 'assets/logo.svg'
+if (!(Test-Path -LiteralPath $taskLogoPath -PathType Leaf)) {
+    throw '缺少插件 Logo 文件 assets/logo.svg。'
+}
+$taskExpectedLogo = [string]$taskStorePlugin.logo
+if ($taskExpectedLogo -and $taskSource -notmatch ('"Logo": "' + [regex]::Escape($taskExpectedLogo) + '"')) {
+    throw 'store/registry.json 的 logo 与 Go 注册元数据 Logo 不一致。'
+}
+$taskServiceSource = Get-Content -LiteralPath (Join-Path $taskRoot 'internal/classifier/service.go') -Raw -Encoding utf8
+$taskExpectedPrefix = '/v0/management/plugins/' + $taskPluginId
+if ($taskServiceSource -notmatch ('(?m)^const apiPrefix = "' + [regex]::Escape($taskExpectedPrefix) + '"\r?$')) {
+    throw 'internal/classifier/service.go 中的 apiPrefix 与插件 ID 不一致。'
+}
+$taskContractSource = Get-Content -LiteralPath (Join-Path $taskRoot 'src/api/contract.ts') -Raw -Encoding utf8
+if ($taskContractSource -notmatch ("(?m)^export const PLUGIN_ID = '" + [regex]::Escape($taskPluginId) + "'\r?$")) {
+    throw 'src/api/contract.ts 中的 PLUGIN_ID 与插件 ID 不一致。'
 }
 if (!$GoExe) { $GoExe = (Get-Command go -ErrorAction SilentlyContinue).Source }
 if (!$Compiler) { $Compiler = (Get-Command gcc -ErrorAction SilentlyContinue).Source }

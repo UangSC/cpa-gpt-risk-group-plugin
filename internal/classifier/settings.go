@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 func validateSettings(v Settings) error {
-	if v.Routing.Mode != "prefix" && v.Routing.Mode != "priority" {
+	if v.Routing.Mode != "none" && v.Routing.Mode != "prefix" && v.Routing.Mode != "priority" {
 		return bad("分组策略无效")
 	}
 	if v.InspectionMethod != "candy" && v.InspectionMethod != "fingerprint" {
@@ -28,7 +28,7 @@ func validateSettings(v Settings) error {
 		return bad("思考程度仅支持低 low、中 medium、高 high")
 	}
 	if v.Pagination.List < 1 || v.Pagination.List > 100 || v.Pagination.Card < 1 || v.Pagination.Card > 100 || v.Pagination.Pool < 1 || v.Pagination.Pool > 24 {
-		return bad("分页数量无效：列表/卡片 1～100，三栏每栏 1～24")
+		return bad("分页数量无效：列表/卡片 1～100，双栏每栏 1～24")
 	}
 	if v.Pagination.Statistics < 1 || v.Pagination.Statistics > maxStatisticsPageSize {
 		return bad("账号统计分页数量必须为 1～4")
@@ -69,7 +69,7 @@ func validateSettings(v Settings) error {
 		a := strings.TrimRight(strings.TrimSpace(v.Prefixes.Normal), "/")
 		b := strings.TrimRight(strings.TrimSpace(v.Prefixes.Downshift), "/")
 		if a == b {
-			return bad("正常与降档前缀不能相同")
+			return bad("正常与风控前缀不能相同")
 		}
 		for _, prefix := range []string{a, b} {
 			if len(prefix) > 100 || strings.ContainsAny(prefix, " \t\r\n?#\\") {
@@ -108,6 +108,7 @@ func weightsChanged(a, b RoutingSettings) bool {
 func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
+	normalizeScheduleDefaults(&v.Schedule, v.Quota.MinRemainingPercent)
 	if err := validateSettings(v); err != nil {
 		return err
 	}
@@ -130,7 +131,7 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	s.mu.Unlock()
 	fingerprint := configurationFingerprint(v, true)
 	if v.Schedule.Enabled && (!oldConsent || oldFingerprint != fingerprint) && !acknowledged {
-		return &apiError{409, "请先确认定时巡检会在后台修改凭证的模型前缀或优先级配置"}
+		return &apiError{409, "请先确认定时巡检计划及当前分组处理策略"}
 	}
 	if weightsChanged(old.Routing, v.Routing) {
 		return &apiError{409, "权重继承 CPA 当前值，插件不修改权重"}
@@ -179,7 +180,10 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	if err != nil {
 		return err
 	}
-	// 不相关的界面设置不触碰 CPA 凭证；仅路由规则变化时同步。
+	// 仅检测模式以及不相关的界面设置不触碰 CPA 凭证；仅写入模式或路由规则变化时同步。
+	if v.Routing.Mode == "none" {
+		return nil
+	}
 	routingChanged := !reflect.DeepEqual(old.Routing, v.Routing) || old.Prefixes != v.Prefixes
 	if !routingChanged {
 		return nil

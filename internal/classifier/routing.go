@@ -3,7 +3,7 @@ package classifier
 import (
 	"context"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
 func routingValues(routing RoutingSettings, id string, group *string) (RoutingValues, bool) {
@@ -105,6 +105,12 @@ func (s *Service) SaveRouting(ctx context.Context, q RoutingRequest) error {
 	return err
 }
 func (s *Service) apply(ctx context.Context, id string, group *string, v Settings) (Sync, error) {
+	if v.Routing.Mode == "none" {
+		s.mu.Lock()
+		applied := s.recordLocked(id).Group
+		s.mu.Unlock()
+		return Sync{Mode: "none", AppliedGroup: applied, Status: "not-needed"}, nil
+	}
 	live, err := s.adapter.ListCredentials(ctx)
 	if err != nil {
 		return s.failedSync(id, group, v.Routing.Mode, err)
@@ -223,6 +229,9 @@ func (s *Service) Resync(ctx context.Context, id string) (any, error) {
 	settings := clone(s.state.Settings)
 	managedUngrouped := settings.Routing.Mode == "priority" && r.OriginalPrefix != nil
 	s.mu.Unlock()
+	if settings.Routing.Mode == "none" {
+		return nil, bad("当前为仅检测模式，不会修改凭证分组或优先级")
+	}
 	if desired == nil && !managedUngrouped {
 		return nil, bad("该凭证没有待同步的分组")
 	}

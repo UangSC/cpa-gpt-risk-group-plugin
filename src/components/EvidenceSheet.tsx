@@ -44,10 +44,18 @@ export function RequestAttempts({ attempts }: { attempts: RequestAttempt[] }) {
 }
 
 export function EvidenceSheet() {
-  const state = useStore()
-  const detail = state.detail
-  const target = detail ? state.targets.find((t) => t.id === detail.targetId) : undefined
-  const credential = target ? state.credentials.find((c) => c.id === target.credentialId) : undefined
+  const detail = useStore((s) => s.detail)
+  const targets = useStore((s) => s.targets)
+  const credentials = useStore((s) => s.credentials)
+  const settings = useStore((s) => s.settings)
+  const connection = useStore((s) => s.connection)
+  const starting = useStore((s) => s.starting)
+  const tasks = useStore((s) => s.tasks)
+  const syncing = useStore((s) => s.syncing)
+  const openDetail = useStore((s) => s.openDetail)
+  const closeDetail = useStore((s) => s.closeDetail)
+  const target = detail ? targets.find((t) => t.id === detail.targetId) : undefined
+  const credential = target ? credentials.find((c) => c.id === target.credentialId) : undefined
 
   const rounds = target?.rounds ?? []
   const index = useMemo(() => {
@@ -68,13 +76,13 @@ export function EvidenceSheet() {
   const attention = credential ? attentionOf(credential) : []
   const groupedModels = credential?.models.length ?? 1
   const syncIssue = attention.find((a) => a.kind === 'sync')
-  const routingValues = credential ? routingFor(credential, state.settings.routing) : null
+  const routingValues = credential ? routingFor(credential, settings.routing) : null
 
   return (
     <Modal
       open
       wide
-      onClose={() => state.closeDetail()}
+      onClose={closeDetail}
       title={
         <span className="inline" style={{ gap: 8 }}>
           <span className="mono" style={{ fontSize: 14 }}>
@@ -98,7 +106,7 @@ export function EvidenceSheet() {
             type="button"
             className="btn btn-sm"
             disabled={!prev}
-            onClick={() => prev && state.openDetail(target.id, prev.id)}
+            onClick={() => prev && openDetail(target.id, prev.id)}
           >
             更早一轮
           </button>
@@ -106,25 +114,25 @@ export function EvidenceSheet() {
             type="button"
             className="btn btn-sm"
             disabled={!next}
-            onClick={() => next && state.openDetail(target.id, next.id)}
+            onClick={() => next && openDetail(target.id, next.id)}
           >
             更新一轮
           </button>
           <span className="spacer" />
           {syncIssue && (
-            <button type="button" className="btn btn-sm btn-danger" disabled={state.connection !== 'connected' || !!credential && state.syncing.includes(credential.id)} onClick={() => credential && void resyncCredential(credential.id)}>
+            <button type="button" className="btn btn-sm btn-danger" disabled={connection !== 'connected' || !!credential && syncing.includes(credential.id)} onClick={() => credential && void resyncCredential(credential.id)}>
               重试同步
             </button>
           )}
-          <button type="button" className="btn btn-sm" onClick={() => state.closeDetail()}>
+          <button type="button" className="btn btn-sm" onClick={closeDetail}>
             关闭
           </button>
           <button
             type="button"
             className="btn btn-sm btn-primary"
-            disabled={!credential || state.connection !== 'connected' || state.starting || state.tasks.some((task) => task.status === 'running' && task.items.some((item) => item.targetId === target.id)) || credential.auth === 'expired'}
+            disabled={!credential || connection !== 'connected' || starting || tasks.some((task) => task.status === 'running' && task.items.some((item) => item.targetId === target.id)) || credential.auth === 'expired'}
             onClick={() => {
-              state.closeDetail()
+              closeDetail()
               startInspection('manual', [target.id])
             }}
           >
@@ -172,7 +180,7 @@ export function EvidenceSheet() {
           <div className="ev-section">
             <h4>
               说明
-              {round.outcome === 'downshift' && <Chip tone="downshift">降档</Chip>}
+              {round.outcome === 'downshift' && <Chip tone="downshift">风控</Chip>}
               {round.outcome === 'uncertain' && <Chip tone="uncertain">不确定</Chip>}
               {round.outcome === 'normal' && <Chip tone="normal">正常</Chip>}
             </h4>
@@ -240,7 +248,7 @@ export function EvidenceSheet() {
                   </span>
                 ))}
                 。502、503、429 混合计入同一类频繁异常。
-                {round.evidence.serviceError.trigger === 'attempts' && ` 本轮达到 ${round.evidence.serviceError.requestThreshold ?? 3} 次门槛，直接归入降档。`}
+                {round.evidence.serviceError.trigger === 'attempts' && ` 本轮达到 ${round.evidence.serviceError.requestThreshold ?? 3} 次门槛，直接归入风控。`}
               </p>
             </div>
           )}
@@ -282,7 +290,14 @@ export function EvidenceSheet() {
               </Chip>
             </h4>
             <dl className="kv">
-              <dt>当前分组方式</dt><dd>{state.settings.routing.mode === 'prefix' ? '模型前缀' : '仅优先级'}</dd>
+              <dt>当前分组方式</dt>
+              <dd>
+                {settings.routing.mode === 'none'
+                  ? '仅检测'
+                  : settings.routing.mode === 'prefix'
+                    ? '模型前缀'
+                    : '仅优先级'}
+              </dd>
               <dt>原始模型名</dt>
               <dd className="mono">{target.model}</dd>
               <dt>本轮思考程度</dt>
@@ -290,30 +305,32 @@ export function EvidenceSheet() {
               <dt>当前生效</dt>
               <dd className="mono">
                 {credential
-                  ? routedModelName(credential, target.model, state.settings)
+                  ? routedModelName(credential, target.model, settings)
                   : `${target.model}（原始名称）`}
               </dd>
               <dt>凭证分组</dt>
               <dd>
                 {typeof credential?.prefix === 'string'
-                  ? `${credential.group === 'normal' ? '正常' : credential.group === 'downshift' ? '降档' : '未分组'} · 当前前缀 ${credential.prefix || '无前缀'} · 优先级 ${routingValues?.priority ?? 0} · 权重 ${credential.routing?.weight ?? '未知'}`
-                  : state.settings.routing.mode === 'priority'
-                  ? `${credential?.group === 'normal' ? '正常' : credential?.group === 'downshift' ? '降档' : '未分组'} · 优先级 ${routingValues?.priority ?? 0} · 权重 ${credential?.routing?.weight ?? '未知'}`
+                  ? `${credential.group === 'normal' ? '正常' : credential.group === 'downshift' ? '风控' : '未分组'} · 当前前缀 ${credential.prefix || '无前缀'} · 优先级 ${routingValues?.priority ?? 0} · 权重 ${credential.routing?.weight ?? '未知'}`
+                  : settings.routing.mode !== 'prefix'
+                  ? `${credential?.group === 'normal' ? '正常' : credential?.group === 'downshift' ? '风控' : '未分组'} · 优先级 ${routingValues?.priority ?? 0} · 权重 ${credential?.routing?.weight ?? '未知'}`
                   : credential?.group === 'normal'
-                  ? state.settings.prefixes.normal
-                    ? `正常组 ${state.settings.prefixes.normal}（全部 ${groupedModels} 个模型）`
+                  ? settings.prefixes.normal
+                    ? `正常组 ${settings.prefixes.normal}（全部 ${groupedModels} 个模型）`
                     : `正常组不加前缀（全部 ${groupedModels} 个模型保持原始名称）`
                   : credential?.group === 'downshift'
-                    ? `降档组 ${state.settings.prefixes.downshift}（全部 ${groupedModels} 个模型）`
+                    ? `风控组 ${settings.prefixes.downshift}（全部 ${groupedModels} 个模型）`
                     : '未分组'}
               </dd>
               <dt>本轮目标</dt>
               <dd>
-                {round.sync?.desiredGroup === 'normal'
-                  ? `写入正常组；${round.sync.mode === 'priority' ? '按该组优先级调度' : '该凭证的全部模型一起切换'}`
-                  : round.sync?.desiredGroup === 'downshift'
-                    ? `写入降档组；${round.sync.mode === 'priority' ? '按该组优先级调度' : '该凭证的全部模型一起切换'}`
-                    : '本轮不改变分组'}
+                {round.sync?.mode === 'none'
+                  ? '仅检测（未修改分组或优先级）'
+                  : round.sync?.desiredGroup === 'normal'
+                    ? `写入正常组；${round.sync.mode === 'priority' ? '按该组优先级调度' : '该凭证的全部模型一起切换'}`
+                    : round.sync?.desiredGroup === 'downshift'
+                      ? `写入风控组；${round.sync.mode === 'priority' ? '按该组优先级调度' : '该凭证的全部模型一起切换'}`
+                      : '本轮不改变分组'}
               </dd>
             </dl>
             {round.sync?.status === 'failed' && (
@@ -325,11 +342,11 @@ export function EvidenceSheet() {
             {round.outcome === 'uncertain' && (
               <p className="note">
                 本轮没有形成可靠结论，因此分组保持不变（当前为
-                {credential?.group === 'normal' ? '正常组' : credential?.group === 'downshift' ? '降档组' : '未分组'}）。
+                {credential?.group === 'normal' ? '正常组' : credential?.group === 'downshift' ? '风控组' : '未分组'}）。
               </p>
             )}
             <p className="note">
-              判定按凭证聚合：只要该凭证下有任一模型的最近一轮结论为降档，整个凭证都会留在降档组，
+              判定按凭证聚合：只要该凭证下有任一模型的最近一轮结论为风控，整个凭证都会留在风控组，
               直到该模型的新一轮检测完整通过。
             </p>
           </div>

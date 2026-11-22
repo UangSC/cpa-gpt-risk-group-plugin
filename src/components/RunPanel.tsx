@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/store'
 import { cancelTask } from '../store/actions'
 import { batchScopeLabel, buildHistoryBatches, type HistoryBatch } from '../lib/historyBatches'
@@ -36,8 +36,19 @@ export function RunPanel() {
   const credentials = useStore((s) => s.credentials)
   const connected = useStore((s) => s.connection === 'connected')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const now = useNow(5_000)
-  const batches = useMemo(() => buildHistoryBatches(targets, credentials, tasks), [targets, credentials, tasks])
+  const [closing, setClosing] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setClosing(true)
+      return
+    }
+    if (!closing) return
+    const timer = window.setTimeout(() => setClosing(false), 280)
+    return () => window.clearTimeout(timer)
+  }, [open, closing])
+  const active = open || closing
+  const now = useNow(5_000, active)
+  const batches = useMemo(() => (active ? buildHistoryBatches(targets, credentials, tasks) : []), [active, targets, credentials, tasks])
   const running = tasks.find((task) => task.status === 'running')
   const runningBatch = running ? batches.find((batch) => batch.task?.id === running.id) : undefined
   const recent = tasks.filter((task) => task.id !== running?.id).slice(0, 4)
@@ -54,7 +65,7 @@ export function RunPanel() {
     head={running ? <button type="button" className="btn btn-sm btn-danger" disabled={!connected} onClick={() => cancelTask(running.id)}><Icon.Stop />停止</button> : undefined}>
     {runningBatch ? renderBatch(runningBatch) : <div className="empty drawer-empty">
       <div className="empty-icon"><Icon.History /></div><h4>当前没有进行中的巡检</h4>
-      <p>在凭证列表中选择对象后点击「测试」，或使用「巡检全部」。</p>
+      <p>在凭证列表中勾选对象后点击「巡检选中」，或使用「巡检全部」。</p>
     </div>}
     {!!recent.length && <><div className="history-day">最近批次</div>{recent.map(renderBatch)}</>}
   </Drawer>

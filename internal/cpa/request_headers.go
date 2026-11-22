@@ -14,10 +14,11 @@ import (
 	"strings"
 )
 
-// 由本次开发核实的 Codex CLI 正式版本；更新只需替换这个常量。
-const CodexCLIVersion = "0.170.0"
+// 仅作为 `/api-call` 主动刷新额度接口在 CPA 未配置 header-defaults 时的兜底版本标识；模型探测留空交由 CPA 内核注入。
+const fallbackQuotaCodexCLIVersion = "0.170.0"
 
 type RequestHeaderProfile struct {
+	Source          string            `json:"source,omitempty"`
 	CodexCLIVersion string            `json:"codexCliVersion"`
 	DefaultHeaders  map[string]string `json:"defaultHeaders"`
 	ManagedHeaders  []string          `json:"managedHeaders"`
@@ -35,7 +36,7 @@ var protectedRequestHeaders = map[string]bool{
 	"origin": true, "referer": true, "forwarded": true, "accept-encoding": true,
 }
 
-func DefaultRequestHeaderProfile() RequestHeaderProfile {
+func fallbackCodexUserAgent() string {
 	arch := runtime.GOARCH
 	if arch == "amd64" {
 		arch = "x86_64"
@@ -43,28 +44,126 @@ func DefaultRequestHeaderProfile() RequestHeaderProfile {
 	if arch == "arm64" {
 		arch = "aarch64"
 	}
-	os := runtime.GOOS
-	if os == "windows" {
-		os = "Windows 10.0.19045"
+	osName := runtime.GOOS
+	if osName == "windows" {
+		osName = "Windows 10.0.19045"
 	}
-	if os == "darwin" {
-		os = "Mac OS"
+	if osName == "darwin" {
+		osName = "Mac OS"
 	}
-	if os == "linux" {
-		os = "Linux"
+	if osName == "linux" {
+		osName = "Linux"
 	}
+	return fmt.Sprintf("codex_cli_rs/%s (%s; %s) unknown", fallbackQuotaCodexCLIVersion, osName, arch)
+}
+
+func DefaultRequestHeaderProfile() RequestHeaderProfile {
 	managed := make([]string, 0, len(protectedRequestHeaders))
 	for name := range protectedRequestHeaders {
 		managed = append(managed, textproto.CanonicalMIMEHeaderKey(name))
 	}
 	sort.Strings(managed)
-	return RequestHeaderProfile{CodexCLIVersion: CodexCLIVersion,
-		DefaultHeaders: map[string]string{"User-Agent": fmt.Sprintf("codex_cli_rs/%s (%s; %s) unknown", CodexCLIVersion, os, arch), "Originator": "codex_cli_rs", "Content-Type": "application/json", "Accept": "text/event-stream"},
-		ManagedHeaders: managed}
+	return RequestHeaderProfile{
+		Source:          "cpa-core",
+		CodexCLIVersion: "",
+		DefaultHeaders: map[string]string{
+			"Content-Type": "application/json",
+			"Accept":       "text/event-stream",
+		},
+		ManagedHeaders: managed,
+	}
+}
+
+func validHeaderName(name string) bool {
+	if name == "" || len(name) > 128 || strings.TrimSpace(name) != name {
+		return false
+	}
+	for _, character := range name {
+		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", character)) {
+			return false
+		}
+	}
+	return true
+}
+
+func validHeaderValue(value string) bool {
+	if strings.TrimSpace(value) == "" || len(value) > 4096 {
+		return false
+	}
+	for _, character := range value {
+		if character != '\t' && (character < 32 || character > 126) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Client) cpaCodexHeaderDefaults(ctx context.Context) map[string]string {
+	var cfg struct {
+		CodexHeaderDefaults map[string]any `json:"codex-header-defaults"`
+		HeaderDefaults      map[string]any `json:"header-defaults"`
+	}
+	if err := c.request(ctx, "GET", "/config", nil, &cfg); err != nil {
+		return nil
+	}
+	raw := cfg.CodexHeaderDefaults
+	if len(raw) == 0 {
+		raw = cfg.HeaderDefaults
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for name, val := range raw {
+		str, ok := val.(string)
+		if !ok || !validHeaderName(name) || !validHeaderValue(str) {
+			continue
+		}
+		key := normalizedHeaderName(name)
+		if protectedRequestHeaders[key] || isPluginManagedHeaderKey(key) || strings.HasPrefix(key, "sec-") || strings.HasPrefix(key, "x-forwarded-") {
+			continue
+		}
+		out[textproto.CanonicalMIMEHeaderKey(name)] = str
+	}
+	return out
+}
+
+func extractCodexCLIVersion(headers map[string]string) string {
+	if v := strings.TrimSpace(headers["Version"]); v != "" {
+		return v
+	}
+	ua := headers["User-Agent"]
+	const marker = "codex_cli_rs/"
+	if idx := strings.Index(strings.ToLower(ua), marker); idx >= 0 {
+		rest := ua[idx+len(marker):]
+		if cut := strings.IndexAny(rest, " \t(;/)"); cut >= 0 {
+			rest = rest[:cut]
+		}
+		return strings.TrimSpace(rest)
+	}
+	return ""
+}
+
+func (c *Client) RequestHeaderProfile(ctx context.Context) RequestHeaderProfile {
+	profile := DefaultRequestHeaderProfile()
+	defaults := c.cpaCodexHeaderDefaults(ctx)
+	if len(defaults) == 0 {
+		return profile
+	}
+	profile.Source = "cpa-config"
+	for name, value := range defaults {
+		profile.DefaultHeaders[name] = value
+	}
+	profile.CodexCLIVersion = extractCodexCLIVersion(defaults)
+	return profile
 }
 
 func normalizedHeaderName(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+}
+
+func isPluginManagedHeaderKey(key string) bool {
+	return strings.HasPrefix(key, "x-cpa-risk-group-") || strings.HasPrefix(key, "x-cpa-downshift-")
 }
 
 // ValidateHeaderOverrides 保留普通用户头，拒绝认证、路由和传输控制头及换行注入。
@@ -85,7 +184,7 @@ func ValidateHeaderOverrides(overrides map[string]string) (map[string]string, er
 			}
 		}
 		key := normalizedHeaderName(name)
-		if protectedRequestHeaders[key] || strings.HasPrefix(key, "x-cpa-downshift-") || strings.HasPrefix(key, "sec-") || strings.HasPrefix(key, "x-forwarded-") {
+		if protectedRequestHeaders[key] || isPluginManagedHeaderKey(key) || strings.HasPrefix(key, "sec-") || strings.HasPrefix(key, "x-forwarded-") {
 			return nil, fmt.Errorf("请求头 %s 由 CPA 管理，不能由插件覆盖", textproto.CanonicalMIMEHeaderKey(name))
 		}
 		if seen[strings.ToLower(name)] {
@@ -109,9 +208,21 @@ func ValidateHeaderOverrides(overrides map[string]string) (map[string]string, er
 	return result, nil
 }
 
-func privateHeaderSource(name string) string {
+func headerSourceDigest(name string) string {
 	digest := sha256.Sum256([]byte(strings.ToLower(name)))
-	return "X-Cpa-Downshift-Hdr-" + hex.EncodeToString(digest[:12])
+	return hex.EncodeToString(digest[:12])
+}
+
+func privateHeaderSource(name string) string {
+	return "X-Cpa-Risk-Group-Hdr-" + headerSourceDigest(name)
+}
+
+func legacyPrivateHeaderSource(name string) string {
+	return "X-Cpa-Downshift-Hdr-" + headerSourceDigest(name)
+}
+
+func isPluginHeaderMapping(name, value string) bool {
+	return value == "$"+privateHeaderSource(name) || value == "$"+legacyPrivateHeaderSource(name)
 }
 
 type headerConfigurationError struct{ message string }
@@ -174,7 +285,7 @@ func (c *Client) prepareHeaderMappings(ctx context.Context, account *hostAuth, r
 		}
 		byName[key] = name
 		var value string
-		if json.Unmarshal(raw, &value) == nil && value == "$"+privateHeaderSource(name) {
+		if json.Unmarshal(raw, &value) == nil && isPluginHeaderMapping(name, value) {
 			if _, exists := overrides[textproto.CanonicalMIMEHeaderKey(name)]; !exists {
 				patch[name] = ""
 			}
@@ -184,9 +295,14 @@ func (c *Client) prepareHeaderMappings(ctx context.Context, account *hostAuth, r
 		mapping := "$" + privateHeaderSource(name)
 		if existing, ok := byName[strings.ToLower(name)]; ok {
 			var value string
-			if json.Unmarshal(rules[existing], &value) != nil || value != mapping {
+			if json.Unmarshal(rules[existing], &value) != nil || !isPluginHeaderMapping(name, value) {
 				return &headerConfigurationError{fmt.Sprintf("CPA 凭证已有非插件的 %s 请求头规则，已保留原规则并停止覆盖", name)}
 			}
+			if value == mapping {
+				continue
+			}
+			// 平滑迁移旧版 X-Cpa-Downshift-Hdr-* 映射至当前插件映射名。
+			patch[existing] = mapping
 			continue
 		}
 		patch[name] = mapping
@@ -223,8 +339,15 @@ func (c *Client) prepareHeaderMappings(ctx context.Context, account *hostAuth, r
 	return nil
 }
 
-func codexRequestHeaders(accept string, overrides map[string]string) map[string]string {
-	headers := DefaultRequestHeaderProfile().DefaultHeaders
+func (c *Client) quotaRequestHeaders(ctx context.Context, accept string, overrides map[string]string) map[string]string {
+	headers := map[string]string{
+		"User-Agent":   fallbackCodexUserAgent(),
+		"Originator":   "codex_cli_rs",
+		"Content-Type": "application/json",
+	}
+	for name, value := range c.cpaCodexHeaderDefaults(ctx) {
+		headers[name] = value
+	}
 	for name, value := range overrides {
 		headers[name] = value
 	}
@@ -232,12 +355,13 @@ func codexRequestHeaders(accept string, overrides map[string]string) map[string]
 	return headers
 }
 
+// probeRequestHeaders 在未设置插件覆盖时只传递基础内容协商头，让 CPA 内核自行按其 Codex CLI 配置注入默认请求头。
 func probeRequestHeaders(overrides map[string]string) http.Header {
 	headers := http.Header{}
-	for name, value := range codexRequestHeaders("text/event-stream", overrides) {
-		headers.Set(name, value)
-	}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
 	for name, value := range overrides {
+		headers.Set(name, value)
 		headers.Set(privateHeaderSource(name), value)
 	}
 	return headers

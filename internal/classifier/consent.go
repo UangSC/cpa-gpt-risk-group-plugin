@@ -5,8 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 // 配置指纹排除界面偏好、继承权重和运行时 nextRunAt，只绑定可能影响巡检写入的规则。
@@ -40,7 +39,7 @@ func fingerprintWithReasoning(settings Settings, includeSchedule, includeReasoni
 	}
 	if includeHeaders {
 		data["headerOverrides"] = settings.HeaderOverrides
-		data["codexCliVersion"] = cpa.CodexCLIVersion
+		data["defaultHeaderPolicy"] = "cpa-core-codex-cli"
 	}
 	if includeSchedule {
 		data["schedule"] = cloneSchedule(settings.Schedule)

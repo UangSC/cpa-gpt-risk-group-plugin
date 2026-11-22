@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
 type QuotaRefreshRequest struct {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Credential } from '../types'
-import { buildViews, type CredentialView } from '../lib/derive'
+import { buildViews, isManuallyExcluded, type CredentialView } from '../lib/derive'
 import { formatRelative } from '../lib/format'
 import { VERDICT_LABEL } from '../lib/rules'
 import { activeInspectionCredentialIds, setCredentialExclusions } from '../store/exclusions'
@@ -51,7 +51,7 @@ export function ExcludedCredential({ view, selected, onSelect, disabled, now }: 
       {!credential.quota.windows.length && <span className="excluded-secondary">额度未知</span>}
     </div>
     <div className="excluded-card-config">
-      <span>原分组 <strong>{credential.group === 'normal' ? '正常' : credential.group === 'downshift' ? '降档' : '未分组'}</strong></span>
+      <span>原分组 <strong>{credential.group === 'normal' ? '正常' : credential.group === 'downshift' ? '风控' : '未分组'}</strong></span>
       <span>优先级 <strong>{credential.routing?.priority ?? '未知'}</strong></span>
       <span>权重 <strong>{credential.routing?.weight ?? '未知'}</strong></span>
     </div>
@@ -78,12 +78,23 @@ export function ExclusionDrawer() {
   const syncing = useStore((state) => state.syncing)
   const connection = useStore((state) => state.connection)
   const starting = useStore((state) => state.starting)
-  const now = useNow(30_000)
+  const [closing, setClosing] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setClosing(true)
+      return
+    }
+    if (!closing) return
+    const timer = window.setTimeout(() => setClosing(false), 280)
+    return () => window.clearTimeout(timer)
+  }, [open, closing])
+  const active = open || closing
+  const now = useNow(30_000, active)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<string[]>([])
 
-  const excluded = useMemo(() => credentials.filter((credential) => credential.inspectionExcluded), [credentials])
-  const views = useMemo(() => buildViews(excluded, targets, settings), [excluded, targets, settings])
+  const excluded = useMemo(() => credentials.filter(isManuallyExcluded), [credentials])
+  const views = useMemo(() => (active ? buildViews(excluded, targets, settings) : []), [active, excluded, targets, settings])
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
     return views.filter(({ credential }) => !query || [credential.name, credential.file, ...credential.models].join(' ').toLowerCase().includes(query))
@@ -104,7 +115,7 @@ export function ExclusionDrawer() {
       setSelected([])
       return true
     }}
-    sub="这里显示在 CPA 停用或手动排除的凭证，均不参加手动、批量或定时巡检。"
+    sub="这里显示手动设为免检的凭证，均不参加手动、批量或定时巡检。已关闭的凭证在主列表中通过开关直接管理。"
     className="exclusion-drawer"
     head={<span className="exclusion-drawer-count">{excluded.length}</span>}>
     <div className="exclusion-drawer-content">
@@ -116,7 +127,7 @@ export function ExclusionDrawer() {
       </div>
       <div className="exclusion-drawer-cards">
         {filtered.length ? filtered.map((view) => <ExcludedCredential key={view.credential.id} view={view} selected={chosen.includes(view.credential.id)} onSelect={() => toggle(view.credential.id)} disabled={disabledFor(view.credential)} now={now} />)
-          : <div className="empty drawer-empty"><div className="empty-icon"><ExclusionIcon /></div><h4>{search ? '没有匹配的凭证' : '暂无不参与巡检的凭证'}</h4><p>{search ? '更换搜索词，或清空搜索查看全部凭证。' : '在凭证卡片或批量操作中点击“排除”，即可移入这里。'}</p></div>}
+          : <div className="empty drawer-empty"><div className="empty-icon"><ExclusionIcon /></div><h4>{search ? '没有匹配的凭证' : '暂无不参与巡检的凭证'}</h4><p>{search ? '更换搜索词，或清空搜索查看全部凭证。' : '在凭证卡片或批量操作中点击「免检」，即可移入这里。'}</p></div>}
       </div>
       <div className="exclusion-drawer-footer">
         <div><strong>{chosen.length ? `已选择 ${chosen.length} 个` : '恢复后回到原分类'}</strong><span>恢复参与不会自动开始巡检。</span></div>

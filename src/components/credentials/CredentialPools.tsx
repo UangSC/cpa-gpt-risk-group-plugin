@@ -1,189 +1,362 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { formatRelative } from '../../lib/format'
 import { lowestQuota, type CredentialView } from '../../lib/derive'
-import { Chip, Icon, PlanBadge, SecretName, useSelection } from '../ui'
+import type { VerdictFilter } from '../../store/store'
+import { Chip, HoverCard, PlanBadge, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { type CredentialRuntime, StatusPill, QuotaCell, Actions } from './CredentialParts'
-import { SelectableCard } from './SelectableCard'
+import { ActivityRail, type CredentialRuntime, StatusPill, GroupCell, QuotaCell, Actions, resolveCardActivity, stop } from './CredentialParts'
+import { CardNote, SelectableCard, cardNote } from './SelectableCard'
 import { CredentialPager, credentialPage } from './CredentialPager'
 
-type PoolKey = 'normal' | 'uncertain' | 'downshift'
+type PoolKey = 'normal' | 'attention'
+type RightSubFilter = 'all' | 'downshift' | 'pending'
 
-function PoolCard({ view, runtime }: { view: CredentialView; runtime: CredentialRuntime }) {
+const VERDICT_FILTER_TITLES: Record<VerdictFilter, string> = {
+  all: '全部',
+  normal: '正常凭证',
+  downshift: '风控凭证',
+  uncertain: '不确定凭证',
+  untested: '未检测凭证',
+  attention: '需处理凭证',
+}
+
+const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialView; runtime: CredentialRuntime }) {
   const selection = useSelection()
-  const selected = selection.has(view.credential.id)
-  const busy = runtime.activeCredentialIds.includes(view.credential.id)
+  const isDisabled = view.credential.disabled
+  const selected = !isDisabled && selection.has(view.credential.id)
+  const activity = !isDisabled ? resolveCardActivity(view.credential.id, runtime) : null
+  const quotaRefreshing = !isDisabled && runtime.quotaRefreshingIds.has(view.credential.id)
   const lowest = lowestQuota(view.credential)
-  const gateNote =
-    view.credential.quota.status === 'exhausted'
-      ? '额度不足'
-      : lowest != null && lowest <= runtime.settings.quota.minRemainingPercent
-        ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
-        : null
+  const quotaInlineWarn =
+    view.credential.quota.windows.length > 0
+      ? view.credential.quota.status === 'exhausted'
+        ? '额度不足'
+        : lowest != null && lowest <= runtime.settings.quota.minRemainingPercent
+          ? '低于门槛'
+          : null
+      : null
+  const hasSync = view.attention.some((a) => a.kind === 'sync')
+  const summaryClass = isDisabled
+    ? ''
+    : view.verdict === 'downshift'
+      ? 'is-downshift'
+      : hasSync || view.attention.some((a) => a.kind === 'auth')
+        ? 'is-attention'
+        : view.verdict === 'normal'
+          ? 'is-calm'
+          : ''
+
   return (
     <SelectableCard
       credentialId={view.credential.id}
       selected={selected}
+      disabled={isDisabled}
       onToggle={() => selection.toggle(view.credential.id)}
-      className={`pool-card tone-${view.verdict}`}
+      className={`lane-card tone-${view.verdict}${activity ? ` is-active is-${activity.kind}` : ''}`}
       testId={`cred-${view.credential.id}`}
     >
-      <div className="pool-card-top">
-        <SecretName name={view.credential.name} className="pool-name" />
-        {busy && (
-          <Chip tone="uncertain" dot>
-            检测中
+      <ActivityRail activity={activity} />
+      <div className="lane-card-row1">
+        <input
+          type="checkbox"
+          className="checkbox"
+          checked={selected}
+          disabled={isDisabled}
+          onChange={() => {
+            if (!isDisabled) selection.toggle(view.credential.id)
+          }}
+          onClick={stop}
+          aria-label={isDisabled ? '已关闭的凭证无法勾选' : '选择凭证'}
+        />
+        <PlanBadge plan={view.credential.plan} size="sm" />
+        <SecretName name={view.credential.name} className="lane-card-name" />
+        {isDisabled && <Chip tone="plain">已关闭</Chip>}
+        {activity && (
+          <Chip tone={activity.chipTone} dot>
+            {activity.label}
           </Chip>
         )}
-        {selected && (
-          <span className="tile-check" aria-label="已选择">
-            <Icon.Check />
-          </span>
+        {!isDisabled && !activity && view.credential.availability === 'busy' && (
+          <HoverCard content={`当前有 ${view.credential.busySessions} 个活跃会话，巡检会等待其空闲。`}>
+            <Chip tone="uncertain" dot>
+              会话中
+            </Chip>
+          </HoverCard>
         )}
-        {/* The pool header carries the tier badge itself (top-right), so no extra avatar. */}
-        <PlanBadge plan={view.credential.plan} />
-      </div>
-
-      <div className="pool-card-lights">
-        <span className="tile-label">近期</span>
-        <StatusLights
-          target={view.target}
-          onOpen={(roundId) => view.target && runtime.onOpenDetail(view.target.id, roundId)}
-          limit={6}
-        />
-        <span className="tile-time">
-          {view.lastCheckedAt ? formatRelative(view.lastCheckedAt, runtime.now) : '未检测'}
-        </span>
-      </div>
-
-      <div className="pool-card-routing">
-        <CredentialRouting credential={view.credential} showLabels />
-        {gateNote && <span className="tile-gate">{gateNote}</span>}
-      </div>
-
-      <div className="pool-card-quota">
-        <QuotaCell view={view} settings={runtime.settings} refreshUnknown />
-      </div>
-
-      <div className="pool-card-foot">
+        {!isDisabled && view.credential.auth === 'expired' && <Chip tone="downshift">认证失效</Chip>}
         <StatusPill view={view} size="sm" />
-        <Actions view={view} runtime={runtime} compact />
+      </div>
+
+      <div className="lane-card-row2">
+        <div className="lane-card-evidence">
+          <div className="lane-card-lights">
+            <StatusLights
+              target={view.target}
+              onOpen={(roundId) => view.target && runtime.onOpenDetail(view.target.id, roundId)}
+              limit={7}
+            />
+            <span className="lane-card-time">
+              {view.lastCheckedAt ? formatRelative(view.lastCheckedAt, runtime.now) : '未检测'}
+            </span>
+            {quotaInlineWarn && <span className="quota-warn-inline">· {quotaInlineWarn}</span>}
+          </div>
+          <HoverCard compact wrapperClassName="summary-tip-wrap" content={cardNote(view)}>
+            <div className={`lane-card-summary ${summaryClass}`}>
+              <CardNote view={view} />
+            </div>
+          </HoverCard>
+        </div>
+        <div className="lane-card-quota">
+          <QuotaCell view={view} settings={runtime.settings} refreshUnknown={!isDisabled} compactWarn refreshing={quotaRefreshing} />
+        </div>
+      </div>
+
+      <div className="lane-card-row3">
+        <div className="lane-card-meta">
+          <GroupCell view={view} settings={runtime.settings} />
+          <CredentialRouting credential={view.credential} />
+        </div>
+        <Actions view={view} runtime={runtime} mode="pool" />
       </div>
     </SelectableCard>
   )
-}
+})
 
-function PoolColumn({
-  tone,
-  title,
-  note,
-  count,
-  views,
-  runtime,
-  emptyText,
-  page,
-  onPage,
-}: {
-  tone: PoolKey
-  title: string
-  note?: string
-  count: number
-  views: CredentialView[]
-  runtime: CredentialRuntime
-  emptyText: string
-  page: number
-  onPage: (next: number) => void
-}) {
-  const pageSize = runtime.settings.pagination?.pool ?? 4
-  const current = credentialPage(views, page, pageSize)
-
+function LaneSelectButton({ items }: { items: CredentialView[] }) {
+  const selection = useSelection()
+  const ids = items.filter((v) => !v.credential.disabled).map((v) => v.credential.id)
+  if (ids.length === 0) return null
+  const allSelected = ids.every((id) => selection.has(id))
+  const toggleLane = () => {
+    if (allSelected) {
+      const drop = new Set(ids)
+      selection.set(selection.selected.filter((id) => !drop.has(id)))
+    } else {
+      selection.set([...new Set([...selection.selected, ...ids])])
+    }
+  }
   return (
-    <section className="pool" aria-label={title}>
-      <header className="pool-head">
-        <span className={`dot dot-${tone}`} aria-hidden="true" />
-        <h3>{title}</h3>
-        {note && <span className="pool-note">{note}</span>}
-        <span className="pool-count">{count}</span>
-      </header>
-      <div className="pool-body" style={{ '--pool-page-size': current.size } as React.CSSProperties}>
-        {views.length === 0 ? (
-          <div className="pool-empty">{emptyText}</div>
-        ) : (
-          current.items.map((view) => <PoolCard key={view.credential.id} view={view} runtime={runtime} />)
-        )}
-      </div>
-      {views.length > 0 && <CredentialPager label={`${title}栏`} page={current.page} pages={current.pages} total={views.length} pageSize={current.size} onPage={onPage} />}
-    </section>
+    <button
+      type="button"
+      className="btn btn-ghost lane-select-btn"
+      onClick={toggleLane}
+      aria-pressed={allSelected}
+    >
+      {allSelected ? '取消本页' : '选本页'}
+    </button>
   )
 }
 
-export function CredentialPools({ views, runtime, resetKey = '', onVisibleCredentialIdsChange }: {
-  views: CredentialView[]; runtime: CredentialRuntime; resetKey?: string
+export function CredentialPools({
+  views,
+  runtime,
+  resetKey = '',
+  verdictFilter = 'all',
+  onResetVerdictFilter,
+  onVisibleCredentialIdsChange,
+}: {
+  views: CredentialView[]
+  runtime: CredentialRuntime
+  resetKey?: string
+  verdictFilter?: VerdictFilter
+  onResetVerdictFilter?: () => void
   onVisibleCredentialIdsChange?: (ids: string[]) => void
 }) {
   const pageSize = runtime.settings.pagination?.pool ?? 4
-  const key = `${resetKey}|${pageSize}`
-  const [position, setPosition] = useState<{ key: string; pages: Record<PoolKey, number> }>({ key, pages: { normal: 0, uncertain: 0, downshift: 0 } })
+  const [rightSub, setRightSub] = useState<RightSubFilter>('all')
+  const key = `${resetKey}|${pageSize}|${verdictFilter}|${rightSub}`
+  const [position, setPosition] = useState<{ key: string; pages: Record<PoolKey, number>; focused: number }>({
+    key,
+    pages: { normal: 0, attention: 0 },
+    focused: 0,
+  })
 
-  const normal = views.filter((v) => v.verdict === 'normal')
-  const uncertainOnly = views.filter((v) => v.verdict === 'uncertain')
-  const untested = views.filter((v) => v.verdict === 'untested')
-  const downshift = views.filter((v) => v.verdict === 'downshift')
-  const uncertain = [...uncertainOnly, ...untested]
+  const normal = useMemo(() => views.filter((v) => v.verdict === 'normal'), [views])
+  const downshift = useMemo(() => views.filter((v) => v.verdict === 'downshift'), [views])
+  const uncertain = useMemo(() => views.filter((v) => v.verdict === 'uncertain'), [views])
+  const untested = useMemo(() => views.filter((v) => v.verdict === 'untested'), [views])
 
-  const pages = position.key === key ? position.pages : { normal: 0, uncertain: 0, downshift: 0 }
-  const visibleKey = JSON.stringify([
-    ...credentialPage(normal, pages.normal, pageSize).items,
-    ...credentialPage(uncertain, pages.uncertain, pageSize).items,
-    ...credentialPage(downshift, pages.downshift, pageSize).items,
-  ].map((view) => view.credential.id))
+  const rightAll = useMemo(() => [...downshift, ...uncertain, ...untested], [downshift, uncertain, untested])
+  const rightFiltered = useMemo(() => {
+    if (rightSub === 'downshift') return downshift
+    if (rightSub === 'pending') return [...uncertain, ...untested]
+    return rightAll
+  }, [rightSub, downshift, uncertain, untested, rightAll])
+
+  const pages = position.key === key ? position.pages : { normal: 0, attention: 0 }
+  const focusedPageNum = position.key === key ? position.focused : 0
+
+  const normalPage = credentialPage(normal, pages.normal, pageSize)
+  const rightPage = credentialPage(rightFiltered, pages.attention, pageSize)
+  const focusedPage = credentialPage(views, focusedPageNum, pageSize * 2)
+
+  const visibleIds = useMemo(() => {
+    if (verdictFilter !== 'all') return focusedPage.items.map((v) => v.credential.id)
+    return [...normalPage.items, ...rightPage.items].map((v) => v.credential.id)
+  }, [verdictFilter, focusedPage.items, normalPage.items, rightPage.items])
+
+  const visibleKey = JSON.stringify(visibleIds)
   useEffect(() => {
     onVisibleCredentialIdsChange?.(JSON.parse(visibleKey) as string[])
   }, [visibleKey, onVisibleCredentialIdsChange])
-  useEffect(() => {
-    const next = { normal: credentialPage(normal, pages.normal, pageSize).page, uncertain: credentialPage(uncertain, pages.uncertain, pageSize).page, downshift: credentialPage(downshift, pages.downshift, pageSize).page }
-    if (position.key !== key || next.normal !== pages.normal || next.uncertain !== pages.uncertain || next.downshift !== pages.downshift) setPosition({ key, pages: next })
-  }, [key, pageSize, normal.length, uncertain.length, downshift.length, position.key, pages.normal, pages.uncertain, pages.downshift])
 
-  const turnPage = (key: PoolKey) => (next: number) =>
-    setPosition({ key: `${resetKey}|${pageSize}`, pages: { ...pages, [key]: Math.max(0, next) } })
+  useEffect(() => {
+    if (
+      position.key !== key ||
+      normalPage.page !== pages.normal ||
+      rightPage.page !== pages.attention ||
+      focusedPage.page !== focusedPageNum
+    ) {
+      setPosition({
+        key,
+        pages: { normal: normalPage.page, attention: rightPage.page },
+        focused: focusedPage.page,
+      })
+    }
+  }, [
+    key,
+    position.key,
+    normalPage.page,
+    rightPage.page,
+    focusedPage.page,
+    pages.normal,
+    pages.attention,
+    focusedPageNum,
+  ])
+
+  const turnLanePage = (lane: PoolKey) => (next: number) =>
+    setPosition({
+      key,
+      pages: { ...pages, [lane]: Math.max(0, next) },
+      focused: focusedPageNum,
+    })
+
+  if (verdictFilter !== 'all') {
+    return (
+      <div className="focused-board">
+        <div className="focused-board-head">
+          <span className="inline">
+            <strong>{VERDICT_FILTER_TITLES[verdictFilter]}</strong>
+            <span className="lane-count">{views.length}</span>
+          </span>
+          <div className="inline">
+            <LaneSelectButton items={focusedPage.items} />
+            {onResetVerdictFilter && (
+              <button type="button" className="btn btn-sm" onClick={onResetVerdictFilter}>
+                返回双栏视图
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="focused-grid">
+          {focusedPage.items.map((view) => (
+            <PoolCard key={view.credential.id} view={view} runtime={runtime} />
+          ))}
+        </div>
+        <CredentialPager
+          label={VERDICT_FILTER_TITLES[verdictFilter]}
+          page={focusedPage.page}
+          pages={focusedPage.pages}
+          total={views.length}
+          pageSize={focusedPage.size}
+          hideWhenSinglePage
+          onPage={(next) => setPosition({ key, pages, focused: Math.max(0, next) })}
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="pools">
-      <PoolColumn
-        tone="normal"
-        title="正常"
-        note="检测完整通过"
-        count={normal.length}
-        views={normal}
-        runtime={runtime}
-        emptyText="没有判定正常的凭证"
-        page={pages.normal}
-        onPage={turnPage('normal')}
-      />
-      <PoolColumn
-        tone="uncertain"
-        title="不确定"
-        note={`不确定 ${uncertainOnly.length} · 未检测 ${untested.length}`}
-        count={uncertain.length}
-        views={uncertain}
-        runtime={runtime}
-        emptyText="没有待确认或未检测的凭证"
-        page={pages.uncertain}
-        onPage={turnPage('uncertain')}
-      />
-      <PoolColumn
-        tone="downshift"
-        title="降档"
-        note="当前判定为降档"
-        count={downshift.length}
-        views={downshift}
-        runtime={runtime}
-        emptyText="没有降档凭证，状态良好"
-        page={pages.downshift}
-        onPage={turnPage('downshift')}
-      />
+    <div className="dual-board">
+      <section className="lane" aria-label="正常池">
+        <header className="lane-head">
+          <div className="lane-title">
+            <span className="dot dot-normal" aria-hidden="true" />
+            <h3>正常</h3>
+            <span className="lane-count">{normal.length}</span>
+          </div>
+          <div className="lane-head-right">
+            <LaneSelectButton items={normalPage.items} />
+          </div>
+        </header>
+        <div className="lane-body">
+          {normal.length === 0 ? (
+            <div className="lane-empty">暂无判定正常的凭证</div>
+          ) : (
+            normalPage.items.map((view) => <PoolCard key={view.credential.id} view={view} runtime={runtime} />)
+          )}
+        </div>
+        <CredentialPager
+          label="正常栏"
+          page={normalPage.page}
+          pages={normalPage.pages}
+          total={normal.length}
+          pageSize={normalPage.size}
+          hideWhenSinglePage
+          onPage={turnLanePage('normal')}
+        />
+      </section>
+
+      <section className="lane" aria-label="风控与待定池">
+        <header className="lane-head">
+          <div className="lane-title">
+            <span className={`dot ${downshift.length > 0 ? 'dot-downshift' : 'dot-uncertain'}`} aria-hidden="true" />
+            <h3>风控与待定</h3>
+            <span className="lane-count">{rightAll.length}</span>
+          </div>
+          <div className="lane-head-right">
+            <div className="lane-filter" role="group" aria-label="筛选风控与待定">
+              <button
+                type="button"
+                aria-pressed={rightSub === 'all'}
+                onClick={() => setRightSub('all')}
+              >
+                全部 {rightAll.length}
+              </button>
+              <button
+                type="button"
+                aria-pressed={rightSub === 'downshift'}
+                onClick={() => setRightSub('downshift')}
+              >
+                <span className="dot dot-downshift" aria-hidden="true" />
+                风控 {downshift.length}
+              </button>
+              <button
+                type="button"
+                aria-pressed={rightSub === 'pending'}
+                onClick={() => setRightSub('pending')}
+              >
+                <span className="dot dot-uncertain" aria-hidden="true" />
+                待定 {uncertain.length + untested.length}
+              </button>
+            </div>
+            <LaneSelectButton items={rightPage.items} />
+          </div>
+        </header>
+        <div className="lane-body">
+          {rightFiltered.length === 0 ? (
+            <div className="lane-empty">
+              {rightSub === 'downshift'
+                ? '没有风控凭证，状态良好'
+                : rightSub === 'pending'
+                  ? '没有不确定或未检测的凭证'
+                  : '所有凭证均已正常通过'}
+            </div>
+          ) : (
+            rightPage.items.map((view) => <PoolCard key={view.credential.id} view={view} runtime={runtime} />)
+          )}
+        </div>
+        <CredentialPager
+          label="风控与待定栏"
+          page={rightPage.page}
+          pages={rightPage.pages}
+          total={rightFiltered.length}
+          pageSize={rightPage.size}
+          hideWhenSinglePage
+          onPage={turnLanePage('attention')}
+        />
+      </section>
     </div>
   )
 }

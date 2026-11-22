@@ -7,7 +7,7 @@ import { Chip, Icon, Segmented, useNow } from '../components/ui'
 import { hasOpenDialog, isCompositionEvent, isEditingTarget, isPlainShortcut } from '../lib/keyboard'
 
 const FILTERS: { value: HistoryFilter; label: string }[] = [
-  { value: 'all', label: '全部' }, { value: 'normal', label: '正常' }, { value: 'downshift', label: '降档' },
+  { value: 'all', label: '全部' }, { value: 'normal', label: '正常' }, { value: 'downshift', label: '风控' },
   { value: 'uncertain', label: '不确定' }, { value: 'incomplete', label: '未完成' },
 ]
 const BATCH_PAGE_SIZE = 10
@@ -55,11 +55,16 @@ export function HistoryView({ onOpenDetail }: { onOpenDetail: (targetId: string,
         <div className="sub">每批巡检按准确开始时间归档；展开查看该批凭证的结果、进行中进度和判定依据。</div>
       </div>
     </div>
-    <div className="toolbar">
+    <div className="history-toolbar">
       <div className="search">
         <Icon.Search />
         <input ref={searchRef} type="search" placeholder="搜索凭证、模型或判定原因" value={query}
           onChange={(event) => { setQuery(event.target.value); setVisibleLimit(BATCH_PAGE_SIZE) }} aria-label="搜索历史记录" />
+        {query ? (
+          <button type="button" className="search-clear" onClick={() => { setQuery(''); setVisibleLimit(BATCH_PAGE_SIZE) }} aria-label="清除搜索">✕</button>
+        ) : (
+          <kbd className="search-kbd" aria-hidden="true">/</kbd>
+        )}
       </div>
       <Segmented ariaLabel="按历史结论筛选" value={filter} onChange={(value) => {
         setFilter(value)
@@ -93,7 +98,7 @@ export function HistoryView({ onOpenDetail }: { onOpenDetail: (targetId: string,
           <span>{original.entries.length} 个凭证</span>
           {running && <span>已处理 {finished}/{batch.task!.items.length}</span>}
           {!!outcomes.normal && <Chip tone="normal">正常 {outcomes.normal}</Chip>}
-          {!!outcomes.downshift && <Chip tone="downshift">降档 {outcomes.downshift}</Chip>}
+          {!!outcomes.downshift && <Chip tone="downshift">风控 {outcomes.downshift}</Chip>}
           {!!outcomes.uncertain && <Chip tone="uncertain">不确定 {outcomes.uncertain}</Chip>}
           {!!outcomes.incomplete && <span>未完成 {outcomes.incomplete}</span>}
           {batch.entries.length !== original.entries.length && <span>匹配 {batch.entries.length} 个</span>}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { Credential } from '../types'
 import { useStore } from '../store/store'
-import { Chip, Icon, NameMaskToggle, PlanMark, SecretName, useNow } from '../components/ui'
+import { isManuallyExcluded } from '../lib/derive'
+import { CHART_TOOLTIP_DELAY_MS } from '../lib/tooltipInteraction'
+import { Chip, HoverCard, Icon, PlanMark, SecretName, Select, useNow } from '../components/ui'
 import { CredentialPager, credentialPage } from '../components/credentials/CredentialPager'
 import { formatDateTimePrecise, formatDuration, formatNumber } from '../lib/format'
 import { DEFAULT_SETTINGS } from '../data/defaults'
@@ -12,13 +14,10 @@ import {
   type InspectionMetrics,
   type StatisticsRange,
 } from '../lib/inspectionStatistics'
-import '../styles/statistics.css'
-
-export { summarizeWeek } from '../lib/inspectionStatistics'
 
 const OUTCOMES = [
   ['normal', '正常', 'var(--normal-dot)'],
-  ['downshift', '降档', 'var(--danger-dot)'],
+  ['downshift', '风控', 'var(--danger-dot)'],
   ['uncertain', '不确定', 'var(--warn-dot)'],
   ['incomplete', '未完成', 'var(--neutral-dot)'],
 ] as const
@@ -40,11 +39,46 @@ function TrendChart({ days, account }: { days: DailyInspectionStatistics[]; acco
       ? days.map((_, index) => summarizeDay(index)).join('；') : '所选日期内无巡检'}>
       {days.map((day, index) => {
         const value = counts[index]
-        return <div className="stats-trend-day" key={day.date} title={summarizeDay(index)}>
-          {value?.total ? OUTCOMES.map(([key, label, color]) => value[key] > 0 &&
-            <span key={key} title={`${day.date} · ${label} ${value[key]} 轮`} style={{ height: `${value[key] / peak * 100}%`, backgroundColor: color }} />)
-            : <span className="stats-trend-empty" />}
-        </div>
+        const tipContent = (
+          <>
+            <div className="tip-title">
+              {day.date} · {value?.total ? `${value.total} 轮巡检` : '暂无巡检'}
+            </div>
+            {value?.total ? (
+              OUTCOMES.map(([key, label, color]) =>
+                value[key] > 0 ? (
+                  <div className="tip-row" key={key}>
+                    <span className="tip-k" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <i style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color, display: 'inline-block' }} />
+                      {label}
+                    </span>
+                    <span className="tip-v">{value[key]} 轮</span>
+                  </div>
+                ) : null,
+              )
+            ) : (
+              <div className="tip-row">
+                <span className="tip-v">当日无巡检记录</span>
+              </div>
+            )}
+          </>
+        )
+        return (
+          <HoverCard
+            key={day.date}
+            showDelay={CHART_TOOLTIP_DELAY_MS}
+            fadeOnHide={false}
+            placement="top"
+            wrapperClassName="stats-trend-day-wrap"
+            content={tipContent}
+          >
+            <div className="stats-trend-day" aria-label={summarizeDay(index)}>
+              {value?.total ? OUTCOMES.map(([key]) => value[key] > 0 &&
+                <span key={key} style={{ height: `${value[key] / peak * 100}%`, backgroundColor: OUTCOMES.find(([k]) => k === key)![2] }} />)
+                : <span className="stats-trend-empty" />}
+            </div>
+          </HoverCard>
+        )
       })}
     </div>
     <figcaption>
@@ -64,10 +98,19 @@ function QualityMetric({ label, count, total }: { label: string; count: number; 
 }
 
 function Latency({ metrics }: { metrics?: InspectionMetrics }) {
-  return <div className="stats-latency" title={`基于 ${metrics?.durationCount ?? 0} 轮记录的执行耗时，含重试等待`}>
-    <div><span>耗时中位数</span><strong>{formatDuration(metrics?.p50Ms)}</strong></div>
-    <div><span>P95 耗时</span><strong>{formatDuration(metrics?.p95Ms)}</strong></div>
-  </div>
+  return (
+    <HoverCard
+      compact
+      showDelay={CHART_TOOLTIP_DELAY_MS}
+      wrapperClassName="stats-latency-wrap"
+      content={`基于 ${metrics?.durationCount ?? 0} 轮记录的执行耗时，含重试等待`}
+    >
+      <div className="stats-latency">
+        <div><span>耗时中位数</span><strong>{formatDuration(metrics?.p50Ms)}</strong></div>
+        <div><span>P95 耗时</span><strong>{formatDuration(metrics?.p95Ms)}</strong></div>
+      </div>
+    </HoverCard>
+  )
 }
 
 function AccountCard({ credential, stats, days }: {
@@ -82,14 +125,18 @@ function AccountCard({ credential, stats, days }: {
         <PlanMark plan={credential.plan} size="sm" />
         <SecretName name={credential.name} />
       </div>
-      {credential.inspectionExcluded && <Chip>不参与巡检</Chip>}
+      {credential.disabled ? <Chip>已关闭</Chip> : isManuallyExcluded(credential) ? <Chip>免检</Chip> : null}
     </header>
     <div className="stats-account-volume">
       <strong>{formatNumber(stats?.total ?? 0)}</strong><span>轮巡检</span>
       <span className="stats-account-outcomes">
-        {OUTCOMES.map(([key, label, color]) => <span key={key} title={label} aria-label={`${label} ${stats?.[key] ?? 0} 轮`}>
-          <i style={{ backgroundColor: color }} />{stats?.[key] ?? 0}
-        </span>)}
+        {OUTCOMES.map(([key, label, color]) => (
+          <HoverCard key={key} compact showDelay={CHART_TOOLTIP_DELAY_MS} content={`${label} ${stats?.[key] ?? 0} 轮`}>
+            <span aria-label={`${label} ${stats?.[key] ?? 0} 轮`}>
+              <i style={{ backgroundColor: color }} />{stats?.[key] ?? 0}
+            </span>
+          </HoverCard>
+        ))}
       </span>
     </div>
     {stats ? <TrendChart days={days} account={stats} /> : <div className="stats-account-empty">所选范围内无巡检记录</div>}
@@ -139,19 +186,37 @@ export function Statistics() {
         </div>
       </div>
       <div className="stats-controls">
-        <select aria-label="统计模型" value={activeModel} onChange={(event) => { setModel(event.target.value); setPage(0) }}>
-          <option value="">全部模型</option>{models.map((name) => <option key={name}>{name}</option>)}
-        </select>
-        <select aria-label="统计日期范围" value={range} onChange={(event) => { setRange(Number(event.target.value) as StatisticsRange); setPage(0) }}>
-          <option value="7">近 7 天</option><option value="14">近 14 天</option><option value="30">近 30 天</option>
-        </select>
+        <Select
+          ariaLabel="统计模型"
+          value={activeModel}
+          onChange={(next) => { setModel(next); setPage(0) }}
+          options={[
+            { value: '', label: '全部模型' },
+            ...models.map((name) => ({ value: name, label: name })),
+          ]}
+        />
+        <Select
+          ariaLabel="统计日期范围"
+          value={String(range)}
+          onChange={(next) => { setRange(Number(next) as StatisticsRange); setPage(0) }}
+          options={[
+            { value: '7', label: '近 7 天' },
+            { value: '14', label: '近 14 天' },
+            { value: '30', label: '近 30 天' },
+          ]}
+        />
       </div>
     </div>
     <dl className="stats-kpis">
       <div><dt>巡检轮次</dt><dd>{formatNumber(totals.total)}</dd></div>
       <div><dt>账号覆盖</dt><dd>{formatNumber(covered)} <small>/ {formatNumber(credentials.length)}</small></dd></div>
-      <div><dt>已判定结果中降档占比</dt><dd>{percent(totals.downshift, totals.normal + totals.downshift)}</dd></div>
-      <div title="耗时的第 95 百分位，含重试等待"><dt>P95 耗时</dt><dd>{formatDuration(totals.p95Ms)}</dd></div>
+      <div><dt>已判定结果中风控占比</dt><dd>{percent(totals.downshift, totals.normal + totals.downshift)}</dd></div>
+      <div>
+        <HoverCard compact showDelay={CHART_TOOLTIP_DELAY_MS} content="耗时的第 95 百分位，含重试等待">
+          <dt>P95 耗时</dt>
+        </HoverCard>
+        <dd>{formatDuration(totals.p95Ms)}</dd>
+      </div>
     </dl>
     <div className="stats-grid">
       <section className="stats-panel stats-overview-trend">
@@ -172,19 +237,24 @@ export function Statistics() {
     <section className="stats-accounts" aria-label="账号统计">
       <header className="stats-accounts-heading">
         <div className="stats-accounts-title">
-          <div><h3>账号统计</h3><p>{formatNumber(filtered.length)} 个账号</p></div>
-          <NameMaskToggle />
+          <h3>账号统计</h3>
+          <p>{formatNumber(filtered.length)} 个账号</p>
         </div>
         <div className="stats-controls stats-account-filters">
           <div className="search">
             <Icon.Search />
             <input type="search" aria-label="搜索统计账号" placeholder="搜索账号" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} />
           </div>
-          <select aria-label="账号统计排序" value={sort} onChange={(event) => { setSort(event.target.value); setPage(0) }}>
-            <option value="downshift">降档次数优先</option>
-            <option value="latest">最近巡检优先</option>
-            <option value="name">按账号名称</option>
-          </select>
+          <Select
+            ariaLabel="账号统计排序"
+            value={sort}
+            onChange={(next) => { setSort(next); setPage(0) }}
+            options={[
+              { value: 'downshift', label: '风控次数优先' },
+              { value: 'latest', label: '最近巡检优先' },
+              { value: 'name', label: '按账号名称' },
+            ]}
+          />
         </div>
       </header>
       {pagination.total ? <div className="stats-accounts-grid">{pagination.items.map((credential) =>

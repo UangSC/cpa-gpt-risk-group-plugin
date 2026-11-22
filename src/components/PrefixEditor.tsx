@@ -5,7 +5,7 @@ import { analyzePrefixes, buildModelName, DEFAULT_PREFIXES, stripGroupPrefix } f
 import { Chip, Icon, Segmented } from './ui'
 import { SettingsPanel as Panel } from './SettingsPanel'
 
-export function PrefixEditor() {
+export function PrefixEditor({ wide = false }: { wide?: boolean }) {
   const { settings, update } = useSettingsEditor()
   const credentials = useStore((s) => s.credentials)
 
@@ -27,20 +27,8 @@ export function PrefixEditor() {
         ? `全部 ${modelCounts[0]} 个模型`
         : `全部模型（当前 ${Math.min(...modelCounts)}–${Math.max(...modelCounts)} 个）`
 
-  return (
-    <Panel
-      title="分组策略"
-      desc="选择检测结论如何作用于凭证。默认采用模型前缀，也可只通过优先级调整分组调度。"
-    >
-      <div className="field">
-        <Segmented ariaLabel="分组方式" value={settings.routing.mode}
-          onChange={(mode) => update({ routing: { ...settings.routing, mode } })}
-          options={[{ value: 'prefix', label: '模型前缀' }, { value: 'priority', label: '仅优先级' }]} />
-        <p className="field-hint">{settings.routing.mode === 'prefix'
-          ? '输入前缀名称即可；结尾斜杠在保存时移除，模型名拼接时自动补充分隔符。'
-          : '保持原始模型名称，按凭证所属组应用优先级，权重继承 CPA 当前配置。请在「分组优先级」设置各组的默认值。'}</p>
-      </div>
-      {settings.routing.mode === 'prefix' && <>
+  const prefixFields = (
+    <>
       <div className="field-row">
         <div className="field">
           <div className="field-label">
@@ -76,7 +64,7 @@ export function PrefixEditor() {
 
         <div className="field">
           <div className="field-label">
-            <Chip tone="downshift">降档组</Chip>
+            <Chip tone="downshift">风控组</Chip>
             <span className="field-optional">默认 downshift</span>
           </div>
           <div className={`input-group ${analysis.downshift.errors.length ? 'input-err' : ''}`}>
@@ -84,7 +72,7 @@ export function PrefixEditor() {
               value={downshift}
               onChange={(e) => update({ prefixes: { ...settings.prefixes, downshift: e.target.value } })}
               placeholder={DEFAULT_PREFIXES.downshift}
-              aria-label="降档分组前缀"
+              aria-label="风控分组前缀"
               spellCheck={false}
             />
             <span className="unit">前缀</span>
@@ -112,6 +100,25 @@ export function PrefixEditor() {
           </div>
         ))}
 
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost"
+          onClick={() => {
+            update({ prefixes: { ...DEFAULT_PREFIXES } })
+          }}
+        >
+          恢复默认前缀
+        </button>
+      </div>
+      {!analysis.valid && (
+        <div className="field-hint settings-error" role="status">{analysis.errors[0]}</div>
+      )}
+    </>
+  )
+
+  const prefixPreview = (
+    <>
       <div className="field">
         <div className="field-label">注册后的模型名 <span className="field-optional">最多两个示例</span></div>
         <div className="prefix-preview">
@@ -164,33 +171,59 @@ export function PrefixEditor() {
       </div>
 
       {appliedCount > 0 && analysis.valid && (
-        <div className="schedule-note" style={{ marginBottom: 10 }}>
+        <div className="schedule-note">
           <Icon.Info />
           <span>
             保存后有 <b>{appliedCount}</b> 个已分组凭证的模型名会按新规则生效：
             {analysis.normal.normalized
               ? `正常组加 ${analysis.normal.normalized} 前缀`
               : '正常组恢复原始模型名（不加前缀）'}
-            ，降档组加 {analysis.downshift.normalized || DEFAULT_PREFIXES.downshift} 前缀。
+            ，风控组加 {analysis.downshift.normalized || DEFAULT_PREFIXES.downshift} 前缀。
           </span>
         </div>
       )}
+    </>
+  )
 
-      <div className="settings-actions">
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost"
-          onClick={() => {
-            update({ prefixes: { ...DEFAULT_PREFIXES } })
-          }}
-        >
-          恢复默认前缀
-        </button>
+  return (
+    <Panel
+      full={wide}
+      icon={<Icon.Layers />}
+      title="分组策略"
+      desc="选择检测结论如何作用于凭证。默认仅检测，也可按结论自动写入模型前缀或调整调度优先级。"
+    >
+      <div className={wide && settings.routing.mode === 'prefix' ? 'prefix-wide-grid' : undefined}>
+        <div className="prefix-wide-main">
+          <div className="field">
+            <Segmented
+              ariaLabel="分组方式"
+              value={settings.routing.mode}
+              onChange={(mode) => update({ routing: { ...settings.routing, mode } })}
+              options={[
+                { value: 'none', label: '仅检测' },
+                { value: 'prefix', label: '模型前缀' },
+                { value: 'priority', label: '仅优先级' },
+              ]}
+            />
+            <p className="field-hint">
+              {settings.routing.mode === 'none'
+                ? '只记录检测结果与依据，不修改凭证的模型前缀、分组或优先级。'
+                : settings.routing.mode === 'prefix'
+                  ? '输入前缀名称即可；结尾斜杠在保存时移除，模型名拼接时自动补充分隔符。'
+                  : '保持原始模型名称，按凭证所属组应用优先级，权重继承 CPA 当前配置。请在「分组优先级」设置各组的默认值。'}
+            </p>
+          </div>
+          {settings.routing.mode === 'none' && (
+            <div className="schedule-note">
+              <Icon.Info />
+              <span>当前为「仅检测」模式：巡检与保存设置都不会写入或覆盖 CPA 中的模型前缀与优先级。</span>
+            </div>
+          )}
+          {settings.routing.mode === 'prefix' && prefixFields}
+        </div>
+        {wide && settings.routing.mode === 'prefix' && <div className="prefix-wide-side">{prefixPreview}</div>}
       </div>
-      {!analysis.valid && (
-        <div className="field-hint settings-error" role="status">{analysis.errors[0]}</div>
-      )}
-      </>}
+      {!wide && settings.routing.mode === 'prefix' && <div style={{ marginTop: 12 }}>{prefixPreview}</div>}
     </Panel>
   )
 }

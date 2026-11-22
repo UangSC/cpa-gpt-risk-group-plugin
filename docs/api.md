@@ -1,6 +1,6 @@
 # 管理 API
 
-基路径：`/v0/management/plugins/cpa-codex-downshift-classifier`。所有请求由 CPA 校验 `Authorization: Bearer <管理密钥>`，浏览器客户端固定使用当前 CPA 来源。
+基路径：`/v0/management/plugins/cpa-gpt-risk-group-plugin`。所有请求由 CPA 校验 `Authorization: Bearer <管理密钥>`，浏览器客户端固定使用当前 CPA 来源。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -11,8 +11,9 @@
 | POST | `/history/clear` | 清空历史巡检批次与检测证据 |
 | POST | `/sync` | 重试待同步分组 |
 | PUT | `/settings` | 保存完整设置 |
-| PUT | `/routing` | 编辑或重置凭证优先级 |
+| PUT | `/routing` | 编辑或重置凭证优先级与单凭证权重 |
 | POST | `/exclusions` | 保存是否参与巡检 |
+| PUT | `/status` | 切换凭证开启/关闭状态（同步 CPA） |
 | POST | `/quota/refresh` | 主动刷新明确提交的当前页凭证额度 |
 
 宿主只支持固定管理路由，任务 ID 使用查询参数。JSON 类型见后端 `internal/classifier/types.go` 与页面 `src/types.ts`。
@@ -26,7 +27,7 @@
   "method": "candy",
   "scope": "manual",
   "acknowledgeConfigChanges": true,
-  "configChangesMode": "prefix",
+  "configChangesMode": "none",
   "configChangesRevision": "<当前快照的配置版本>"
 }
 ```
@@ -39,7 +40,7 @@
 
 ## 设置与路由
 
-`PUT /settings` 保存完整设置对象，草稿应基于当前快照。配置包括前缀、写入模式、分组优先级、检测模型、重试、额度策略、并发、思考程度、头覆盖、定时和界面偏好。
+`PUT /settings` 保存完整设置对象，草稿应基于当前快照。配置包括分组写入策略（`routing.mode` 支持 `none` | `prefix` | `priority`，默认 `none` 仅检测）、前缀、分组优先级、检测模型、重试、全局及定时独立额度策略（`schedule.minRemainingPercent` 默认与全局一致）、定时活跃会话策略（`schedule.busySessionPolicy` 支持 `always` | `under-limit` | `skip-busy`，`maxBusySessions` 默认 `3`）、并发、思考程度、头覆盖（未配置覆盖项时直接沿用 CPA 内核 Codex CLI 默认请求头）、定时和界面偏好。
 
 开启或改变影响定时执行的设置时，本次提交需临时附带 `acknowledgeScheduledConfigChanges: true`；确认字段不作为页面普通设置保存。后台保存授权指纹，旧授权不能覆盖新的检测和写入规则。
 
@@ -58,13 +59,17 @@
 
 只保存参与状态，不禁用 CPA 凭证、不改写路由和历史。运行中尚未完成的凭证不能移入排除池。恢复参与不会自动启动巡检。
 
-CPA 已停用的凭证自动进入不参与巡检池。快照中的 `disabled: true` 表示 CPA 停用，`inspectionExcluded` 表示实际是否排除。重新启用后，只有此前手动排除过的凭证仍留在池中。对停用凭证提交恢复会返回 409。
+CPA 已停用的凭证（`disabled: true`）仍保留在主列表中展示并通过开关直接管理，无法被勾选也不参与巡检；排除池（`inspectionExcluded: true`）只容纳手动设为免检的凭证。
+
+## 凭证启用/关闭状态
+
+`PUT /status` 接收 `{credentialId: "<凭证ID>", disabled: true|false}`，通过 CLIProxyAPI 管理接口同步切换凭证开启或关闭状态。运行中尚未完成巡检的凭证返回 409；已关闭的凭证在主列表中不可勾选且不参与任何巡检。
 
 ## 快照与判定
 
-快照的 `source` 为 `live`，同时返回 `configChangesRevision`、`requestHeaderProfile`、凭证、检测目标、任务、设置与能力。缺少可靠的额度、会话或指纹信息时返回未知，不补造数据。
+快照的 `source` 为 `live`，同时返回 `configChangesRevision`、`requestHeaderProfile`（含 `source`：`cpa-core` / `cpa-config`、`defaultHeaders`、`managedHeaders` 与可选 `codexCliVersion`）、凭证、检测目标、任务、设置与能力。缺少可靠的额度、会话或指纹信息时返回未知，不补造数据。
 
-每轮证据记录实际题目、答案、尝试状态、错误、用量、耗时和配置同步结果。只有完整模型响应才能进入答案判定；401/403、CPA 本地冷却与网络问题保持独立原因。真实 502/503/429 默认单轮累计 3 次即降档并停止继续请求；未达单轮门槛时，连续 2 轮未完成检测且出现这些错误也会降档，成功或其它原因中断连续累计。
+每轮证据记录实际题目、答案、尝试状态、错误、用量、耗时和配置同步结果。只有完整模型响应才能进入答案判定；401/403、CPA 本地冷却与网络问题保持独立原因。真实 502/503/429 默认单轮累计 3 次即归为风控并停止继续请求；未达单轮门槛时，连续 2 轮未完成检测且出现这些错误也会归为风控，成功或其它原因中断连续累计。
 
 轮次包含 `taskId` 和 `batchStartedAt`，任务包含 `method`，用于历史和进行中任务按同一批次展示。状态版本 8 保留旧设置与历史，并加入频繁错误门槛和主动额度。旧默认重试等待迁移为 5 秒、10 秒，默认巡检并发迁移为 4；自定义重试保留，旧定时授权因判定规则变化失效，需要重新确认。任务超出保留数量后，轮次仍保留独立的批次身份和开始时间。
 

@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 func newInspectionRound(task Task, q StartRequest, targetID, startedAt, effort string) Round {
@@ -151,15 +151,16 @@ challengeLoop:
 			if valid {
 				if q.Method == "candy" {
 					answer := truncateAnswer(reply.Answer)
+					preview := compactAnswerPreview(answer)
 					matched := MatchesCandy(answer)
 					round.Evidence.Candy = &Candy{"candy-bag-21", CandyQuestion, "21", answer, matched, "接受含独立数字 21 的回答；子串和小数不计入。"}
 					if matched {
-						round.Outcome, round.ReasonCode, round.Reason = "normal", "all-tests-passed", "糖果题通过"
+						round.Outcome, round.ReasonCode, round.Reason = "normal", "all-tests-passed", fmt.Sprintf("糖果题答案正确：%s", preview)
 						if retries > 0 {
-							round.ReasonCode, round.Reason = "passed-after-retry", "异常后重试恢复，糖果题完整通过"
+							round.ReasonCode, round.Reason = "passed-after-retry", fmt.Sprintf("重试后通过，糖果题答案正确：%s", preview)
 						}
 					} else {
-						round.Outcome, round.ReasonCode, round.Reason = "downshift", "candy-mismatch", "糖果题答案不符：回答未包含独立数字 21"
+						round.Outcome, round.ReasonCode, round.Reason = "downshift", "candy-mismatch", fmt.Sprintf("糖果题答案不正确：%s", preview)
 					}
 					break challengeLoop
 				}
@@ -200,4 +201,16 @@ func truncateAnswer(answer string) string {
 		return answer[:32768]
 	}
 	return answer
+}
+
+func compactAnswerPreview(answer string) string {
+	compact := strings.Join(strings.Fields(answer), " ")
+	if compact == "" {
+		return "（空回答）"
+	}
+	runes := []rune(compact)
+	if len(runes) > 64 {
+		return string(runes[:63]) + "…"
+	}
+	return compact
 }

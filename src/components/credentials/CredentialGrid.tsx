@@ -1,89 +1,105 @@
+import type { CSSProperties } from 'react'
 import { formatRelative } from '../../lib/format'
-import { lowestQuota, type CredentialView } from '../../lib/derive'
-import { Chip, Icon, PlanMark, SecretName, useSelection } from '../ui'
+import { type CredentialView } from '../../lib/derive'
+import { Chip, HoverCard, PlanMark, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { type CredentialRuntime, StatusPill, QuotaCell, Actions } from './CredentialParts'
-import { SelectableCard, cardNote } from './SelectableCard'
+import { ActivityRail, type CredentialRuntime, StatusPill, GroupCell, QuotaCell, Actions, resolveCardActivity, stop } from './CredentialParts'
+import { CardNote, SelectableCard, cardNote } from './SelectableCard'
 
-export function CredentialGrid({ views, runtime }: { views: CredentialView[]; runtime: CredentialRuntime }) {
+export function CredentialGrid({
+  views,
+  runtime,
+  columns,
+}: {
+  views: CredentialView[]
+  runtime: CredentialRuntime
+  columns?: number
+}) {
   const selection = useSelection()
   return (
-    <div className="cred-grid">
+    <div className="cred-grid" style={columns ? ({ '--card-cols': columns } as CSSProperties) : undefined}>
       {views.map((view) => {
-        const selected = selection.has(view.credential.id)
-        const busy = runtime.activeCredentialIds.includes(view.credential.id)
-        const lowest = lowestQuota(view.credential)
-        const gateNote =
-          view.credential.quota.status === 'exhausted'
-            ? '额度不足'
-            : lowest != null && lowest <= runtime.settings.quota.minRemainingPercent
-              ? `低于门槛 ${runtime.settings.quota.minRemainingPercent}%`
-              : null
+        const isDisabled = view.credential.disabled
+        const selected = !isDisabled && selection.has(view.credential.id)
+        const activity = !isDisabled ? resolveCardActivity(view.credential.id, runtime) : null
+        const quotaRefreshing = !isDisabled && runtime.quotaRefreshingIds.has(view.credential.id)
+        const noteText = cardNote(view)
+        const reasonClass = !isDisabled && view.verdict === 'downshift'
+          ? 'is-downshift'
+          : !isDisabled && view.attention.length > 0 && !view.reason
+            ? 'is-attention'
+            : !isDisabled && view.verdict === 'normal' && view.attention.length === 0
+              ? 'is-calm'
+              : ''
         return (
           <SelectableCard
             key={view.credential.id}
             credentialId={view.credential.id}
             selected={selected}
+            disabled={isDisabled}
             onToggle={() => selection.toggle(view.credential.id)}
-            className={`cred-tile tone-${view.verdict}`}
+            className={`cred-tile tone-${view.verdict}${activity ? ` is-active is-${activity.kind}` : ''}`}
             testId={`cred-${view.credential.id}`}
           >
+            <ActivityRail activity={activity} />
             <div className="tile-head">
-              <PlanMark plan={view.credential.plan} />
+              <input
+                type="checkbox"
+                className="checkbox"
+                checked={selected}
+                disabled={isDisabled}
+                onChange={() => {
+                  if (!isDisabled) selection.toggle(view.credential.id)
+                }}
+                onClick={stop}
+                aria-label={isDisabled ? '已关闭的凭证无法勾选' : '选择凭证'}
+              />
+              <PlanMark plan={view.credential.plan} size="sm" />
               <div className="tile-ident">
                 <div className="tile-name-line">
                   <SecretName name={view.credential.name} className="tile-name" />
-                  {busy && (
-                      <Chip tone="uncertain" dot>
-                        检测中
-                      </Chip>
+                  {isDisabled && <Chip tone="plain">已关闭</Chip>}
+                  {activity && (
+                    <Chip tone={activity.chipTone} dot>
+                      {activity.label}
+                    </Chip>
                   )}
+                  {!isDisabled && view.credential.auth === 'expired' && <Chip tone="downshift">认证失效</Chip>}
                 </div>
                 <div className="tile-sub">
                   <span className="mono secret-name">{view.credential.file}</span>
-                  <span className="dot-sep" aria-hidden="true">
-                    ·
-                  </span>
-                  <span>
-                    {view.lastCheckedAt
-                      ? `${formatRelative(view.lastCheckedAt, runtime.now)}检测`
-                      : '无检测记录'}
-                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>{view.lastCheckedAt ? `${formatRelative(view.lastCheckedAt, runtime.now)}检测` : '未检测'}</span>
                 </div>
               </div>
-              {selected && (
-                <span className="tile-check" aria-label="已选择">
-                  <Icon.Check />
-                </span>
-              )}
             </div>
 
             <div className="tile-lights">
-              <span className="tile-label">近期状态</span>
+              <span className="tile-label">近期</span>
               <StatusLights
                 target={view.target}
                 onOpen={(roundId) => view.target && runtime.onOpenDetail(view.target.id, roundId)}
-                limit={6}
+                limit={7}
               />
             </div>
 
             <div className="tile-routing">
-              <CredentialRouting credential={view.credential} showLabels />
-              {gateNote && <span className="tile-gate">{gateNote}</span>}
+              <GroupCell view={view} settings={runtime.settings} />
+              <CredentialRouting credential={view.credential} />
             </div>
 
-            <div className="tile-quota">
-              <QuotaCell view={view} settings={runtime.settings} refreshUnknown />
-            </div>
+            <QuotaCell view={view} settings={runtime.settings} refreshUnknown={!isDisabled} refreshing={quotaRefreshing} />
 
-            <div className={`tile-reason ${view.attention.length > 0 && !view.reason ? 'is-attention' : ''}`}>
-              {cardNote(view)}
-            </div>
+            <HoverCard compact wrapperClassName="summary-tip-wrap" content={noteText}>
+              <div className={`tile-reason ${reasonClass}`}>
+                <CardNote view={view} />
+              </div>
+            </HoverCard>
 
             <div className="tile-foot">
               <StatusPill view={view} size="sm" />
-              <Actions view={view} runtime={runtime} compact />
+              <Actions view={view} runtime={runtime} mode="card" />
             </div>
           </SelectableCard>
         )
@@ -91,5 +107,3 @@ export function CredentialGrid({ views, runtime }: { views: CredentialView[]; ru
     </div>
   )
 }
-
-/* ------------------------------------------------------------------ pools */

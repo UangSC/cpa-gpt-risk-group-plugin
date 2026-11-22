@@ -3,7 +3,7 @@ package classifier
 import (
 	"fmt"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 func applyFingerprintResult(round *Round, result fingerprint.Result, retried bool) {
@@ -23,14 +23,18 @@ func applyFingerprintResult(round *Round, result fingerprint.Result, retried boo
 	if result.ValidSamples != fingerprint.ChallengeCount || result.EnrolledAs == "" || result.RequestedProbability == nil {
 		evidence.Consistency = "insufficient"
 		round.Outcome, round.ReasonCode = "uncertain", "fingerprint-insufficient"
-		round.Reason = "指纹参考未覆盖目标模型或三次结果不足以给出概率，保持当前分组"
+		round.Reason = fmt.Sprintf("模型指纹样本不足（%d/%d）", result.ValidSamples, fingerprint.ChallengeCount)
 		return
 	}
 	probability := *result.RequestedProbability
 	if probability > fingerprint.ConfidenceThreshold && result.ReferenceMatched {
 		evidence.Consistency = "consistent"
 		round.Outcome, round.ReasonCode = "normal", "all-tests-passed"
-		round.Reason = fmt.Sprintf("三次模型指纹归因完成，目标参考概率 %.2f%% 高于 90%%", probability*100)
+		matchedModel := result.ClosestModel
+		if matchedModel == "" {
+			matchedModel = result.EnrolledAs
+		}
+		round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s", probability*100, matchedModel)
 		if retried {
 			round.ReasonCode = "passed-after-retry"
 		}
@@ -38,8 +42,13 @@ func applyFingerprintResult(round *Round, result fingerprint.Result, retried boo
 	}
 	evidence.Consistency = "anomalous"
 	round.Outcome, round.ReasonCode = "downshift", "fingerprint-anomaly"
-	round.Reason = fmt.Sprintf("三次模型指纹归因完成，目标参考概率 %.2f%% 未高于 90%%", probability*100)
-	if probability > fingerprint.ConfidenceThreshold {
-		round.Reason = "三次模型指纹归因完成，最高参考模型与目标参考不一致"
+	if result.ClosestModel != "" && result.Probability != nil {
+		if result.ReferenceMatched {
+			round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s（未高于 90%%）", (*result.Probability)*100, result.ClosestModel)
+		} else {
+			round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s", (*result.Probability)*100, result.ClosestModel)
+		}
+	} else {
+		round.Reason = fmt.Sprintf("模型指纹归因 %.2f%%（未高于 90%%）", probability*100)
 	}
 }

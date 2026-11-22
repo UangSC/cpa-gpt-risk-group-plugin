@@ -95,7 +95,7 @@ export function analyzePrefixes(prefixes: PrefixSettings): PrefixAnalysis {
     downshift.normalized &&
     normal.normalized.toLowerCase() === downshift.normalized.toLowerCase()
   ) {
-    errors.push('正常与降档前缀不能相同，否则分组无法区分')
+    errors.push('正常与风控前缀不能相同，否则分组无法区分')
   }
 
   if (

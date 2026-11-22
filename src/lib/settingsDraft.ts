@@ -11,6 +11,7 @@ const compareValue = (settings: Settings, group: typeof GROUPS[number]) => group
 
 export interface HeaderOverrideRow { id: string; name: string; value: string }
 const DRAFT_HEADER_PREFIX = '\u0000header-row:'
+export const DRAFT_JSON_ERROR_KEY = '\u0000header-json-invalid'
 const PROTECTED_HEADERS = new Set([
   'authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'host', 'content-length',
   'connection', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'expect',
@@ -32,14 +33,19 @@ export function serializeHeaderOverrideRows(rows: HeaderOverrideRow[]): Record<s
 }
 
 export function deserializeHeaderOverrideRows(headers?: Record<string, string>): HeaderOverrideRow[] {
-  return Object.entries(headers ?? {}).map(([key, value], index) => {
-    const temporary = key.startsWith(DRAFT_HEADER_PREFIX) ? key.slice(DRAFT_HEADER_PREFIX.length) : null
-    return { id: `header-${index}`, name: temporary === null ? key : temporary.slice(temporary.indexOf(':') + 1), value }
-  })
+  return Object.entries(headers ?? {})
+    .filter(([key]) => key !== DRAFT_JSON_ERROR_KEY)
+    .map(([key, value], index) => {
+      const temporary = key.startsWith(DRAFT_HEADER_PREFIX) ? key.slice(DRAFT_HEADER_PREFIX.length) : null
+      return { id: `header-${index}`, name: temporary === null ? key : temporary.slice(temporary.indexOf(':') + 1), value }
+    })
 }
 
 export function headerOverrideErrors(headers?: Record<string, string>, additionalManaged: string[] = []): string[] {
   if (!headers) return []
+  if (Object.prototype.hasOwnProperty.call(headers, DRAFT_JSON_ERROR_KEY)) {
+    return [`JSON 格式错误：${headers[DRAFT_JSON_ERROR_KEY]}`]
+  }
   const rows = deserializeHeaderOverrideRows(headers)
   const errors: string[] = []
   const seen = new Set<string>()
@@ -47,10 +53,17 @@ export function headerOverrideErrors(headers?: Record<string, string>, additiona
   if (rows.length > 32) errors.push('请求头覆盖最多 32 项')
   rows.forEach((row, index) => {
     const name = row.name.toLowerCase()
+    const normalized = name.replace(/_/g, '-')
     const label = `第 ${index + 1} 项请求头`
     if (!row.name.trim()) errors.push(`${label}名称不能为空`)
     else if (!HEADER_NAME.test(row.name)) errors.push(`${label}名称只能使用有效的 ASCII HTTP 字符`)
-    else if (managed.has(name)) errors.push(`${row.name} 由 CPA 管理，不能覆盖`)
+    else if (
+      managed.has(name)
+      || normalized.startsWith('x-cpa-risk-group-')
+      || normalized.startsWith('x-cpa-downshift-')
+      || normalized.startsWith('sec-')
+      || normalized.startsWith('x-forwarded-')
+    ) errors.push(`${row.name} 由 CPA 管理，不能覆盖`)
     if (seen.has(name)) errors.push(`${label}名称重复，请求头名称不区分大小写`)
     seen.add(name)
     if (typeof row.value !== 'string' || !row.value.trim()) errors.push(`${label}值不能为空；删除该行可恢复默认`)

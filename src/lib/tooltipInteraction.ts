@@ -1,5 +1,6 @@
-export const DEFAULT_TOOLTIP_DELAY_MS = 3000
-export const STATUS_TOOLTIP_DELAY_MS = 120
+export const DEFAULT_TOOLTIP_DELAY_MS = 450
+export const CHART_TOOLTIP_DELAY_MS = 450
+export const STATUS_TOOLTIP_DELAY_MS = 140
 
 /** 每次新的悬浮都从完整等待开始；移出、关闭和卸载可取消尚未显示的气泡。 */
 export function scheduleTooltipOpening(open: () => void, requestedDelay = DEFAULT_TOOLTIP_DELAY_MS): () => void {

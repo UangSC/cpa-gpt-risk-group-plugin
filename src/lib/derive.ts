@@ -21,34 +21,6 @@ export interface CredentialView {
   lastCheckedAt: string | null
 }
 
-export function targetIdFor(credentialId: string, model: string): string {
-  return `${credentialId}::${model}`
-}
-
-export function findTarget(
-  targets: Target[],
-  credentialId: string,
-  model: string,
-): Target | null {
-  return targets.find((t) => t.credentialId === credentialId && t.model === model) ?? null
-}
-
-/* ---------------------------------------------------------------- verdicts */
-
-export interface VerdictCounts {
-  normal: number
-  downshift: number
-  uncertain: number
-  untested: number
-  total: number
-}
-
-export function countCredentialVerdicts(views: CredentialView[]): VerdictCounts {
-  const counts: VerdictCounts = { normal: 0, downshift: 0, uncertain: 0, untested: 0, total: views.length }
-  for (const v of views) counts[v.verdict] += 1
-  return counts
-}
-
 export function lastRound(target: Target | null): InspectionRound | null {
   return target?.rounds[0] ?? null
 }
@@ -68,10 +40,6 @@ export function roundTone(round: InspectionRound): LightTone {
   return 'empty'
 }
 
-export function verdictTone(verdict: Verdict): LightTone {
-  return verdict === 'untested' ? 'empty' : verdict
-}
-
 /* --------------------------------------------------------------- attention */
 
 export type AttentionKind = 'sync' | 'auth' | 'quota' | 'availability'
@@ -82,13 +50,19 @@ export interface AttentionItem {
   detail: string
 }
 
+export function isManuallyExcluded(credential: Pick<Credential, 'inspectionExcluded' | 'disabled'>): boolean {
+  return Boolean(credential.inspectionExcluded && !credential.disabled)
+}
+
 export function attentionOf(credential: Credential): AttentionItem[] {
+  if (credential.disabled) return []
   const items: AttentionItem[] = []
   const { sync } = credential
-  if (credential.unavailable) items.push({ kind: 'availability', label: '暂不可用', detail: 'CPA 官方状态报告此凭证暂不可用或正在冷却，当前不发起检测。这不代表认证失效或模型降档。' })
+  if (credential.unavailable) items.push({ kind: 'availability', label: '暂不可用', detail: 'CPA 官方状态报告此凭证暂不可用或正在冷却，当前不发起检测。这不代表认证失效或模型风控。' })
   if (
-    sync.status === 'failed' ||
-    (sync.desiredGroup != null && sync.appliedGroup !== sync.desiredGroup)
+    sync.mode !== 'none' &&
+    (sync.status === 'failed' ||
+      (sync.desiredGroup != null && sync.appliedGroup !== sync.desiredGroup))
   ) {
     const desired = sync.desiredGroup ?? 'normal'
     items.push({
@@ -96,8 +70,8 @@ export function attentionOf(credential: Credential): AttentionItem[] {
       label: '分组待同步',
       detail:
         sync.message ??
-        `检测结论要求进入${desired === 'normal' ? '正常' : '降档'}组，但当前生效的仍是${
-          sync.appliedGroup ? sync.appliedGroup === 'normal' ? '正常组' : '降档组' : '未分组'
+        `检测结论要求进入${desired === 'normal' ? '正常' : '风控'}组，但当前生效的仍是${
+          sync.appliedGroup ? sync.appliedGroup === 'normal' ? '正常组' : '风控组' : '未分组'
         }。`,
     })
   }
@@ -105,14 +79,14 @@ export function attentionOf(credential: Credential): AttentionItem[] {
     items.push({
       kind: 'auth',
       label: '认证失效',
-      detail: '凭证需要重新登录。认证问题不属于模型降档，分组保持不变。',
+      detail: '凭证需要重新登录。认证问题不属于模型风控，分组保持不变。',
     })
   }
   if (credential.quota.status === 'exhausted') {
     items.push({
       kind: 'quota',
       label: '额度不足',
-      detail: '额度用尽或正在排队，检测被拒绝。额度问题不属于模型降档。',
+      detail: '额度用尽或正在排队，检测被拒绝。额度问题不属于模型风控。',
     })
   }
   return items
@@ -130,6 +104,7 @@ export function lowestQuota(credential: Credential): number | null {
 }
 
 export function quotaBlockedReason(credential: Credential, settings: Settings): string | null {
+  if (credential.disabled) return '凭证已关闭，不参与巡检'
   if (credential.auth === 'expired') return '认证失效，需重新登录'
   if (credential.unavailable) return 'CPA 当前报告凭证暂不可用或正在冷却'
   if (credential.quota.status === 'exhausted') return '额度已用尽'
@@ -149,7 +124,7 @@ export function routedModelName(credential: Credential, model: string, settings:
     const prefix = credential.prefix.trim().replace(/\/+$/g, '')
     return prefix ? `${prefix}/${model.trim()}` : model.trim()
   }
-  if (!credential.group || settings.routing.mode === 'priority') return stripGroupPrefix(model, settings.prefixes)
+  if (!credential.group || settings.routing.mode !== 'prefix') return stripGroupPrefix(model, settings.prefixes)
   const prefix =
     credential.group === 'normal' ? settings.prefixes.normal : settings.prefixes.downshift
   // An empty normal prefix means "keep the original model name".
@@ -163,8 +138,14 @@ export function buildViews(
   targets: Target[],
   settings: Settings,
 ): CredentialView[] {
+  const byCred = new Map<string, Target>()
+  for (const target of targets) {
+    if (target.model === settings.inspectionModel) {
+      byCred.set(target.credentialId, target)
+    }
+  }
   return credentials.map((credential) => {
-    const target = findTarget(targets, credential.id, settings.inspectionModel)
+    const target = byCred.get(credential.id) ?? null
     const latest = lastRound(target)
     return {
       credential,
@@ -187,18 +168,24 @@ export function statusOf(view: CredentialView): StatusKey {
 }
 
 export function sortViews(views: CredentialView[], sort: 'status' | 'recent' | 'quota' | 'name'): CredentialView[] {
-  const copy = [...views]
   if (sort === 'status') {
     const rank = { normal: 0, unknown: 1, downshift: 2, error: 3 }
-    return copy.sort((a, b) => rank[statusOf(a)] - rank[statusOf(b)] || (a.credential.id < b.credential.id ? -1 : a.credential.id > b.credential.id ? 1 : 0))
+    return views
+      .map((view) => ({ view, key: rank[statusOf(view)] }))
+      .sort((a, b) => a.key - b.key || (a.view.credential.id < b.view.credential.id ? -1 : a.view.credential.id > b.view.credential.id ? 1 : 0))
+      .map((entry) => entry.view)
   }
-  if (sort === 'name') return copy.sort((a, b) => a.credential.name.localeCompare(b.credential.name))
+  if (sort === 'name') {
+    return [...views].sort((a, b) => a.credential.name.localeCompare(b.credential.name))
+  }
   if (sort === 'quota') {
-    return copy.sort((a, b) => (lowestQuota(b.credential) ?? -1) - (lowestQuota(a.credential) ?? -1))
+    return views
+      .map((view) => ({ view, key: lowestQuota(view.credential) ?? -1 }))
+      .sort((a, b) => b.key - a.key)
+      .map((entry) => entry.view)
   }
-  return copy.sort((a, b) => {
-    const ta = a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0
-    const tb = b.lastCheckedAt ? new Date(b.lastCheckedAt).getTime() : 0
-    return tb - ta
-  })
+  return views
+    .map((view) => ({ view, key: view.lastCheckedAt ? Date.parse(view.lastCheckedAt) || 0 : 0 }))
+    .sort((a, b) => b.key - a.key)
+    .map((entry) => entry.view)
 }

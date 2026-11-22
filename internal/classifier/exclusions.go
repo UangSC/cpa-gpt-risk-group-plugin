@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
 func excludedFromInspection(credential cpa.Credential, record *Record) bool {
@@ -38,8 +38,8 @@ func (s *Service) SetExclusions(ctx context.Context, ids []string, excluded bool
 		if !ok {
 			return &apiError{404, "Codex 凭证不存在或已移除"}
 		}
-		if !excluded && c.Disabled {
-			return &apiError{409, "该凭证已在 CPA 停用，请先在 CPA 启用"}
+		if excluded && c.Disabled {
+			return &apiError{409, "该凭证已关闭，本身不参与巡检，无需移入排除池"}
 		}
 	}
 	s.mu.Lock()
@@ -80,6 +80,41 @@ func (s *Service) SetExclusions(ctx context.Context, ids []string, excluded bool
 	}
 	return nil
 }
+
+// SetCredentialStatus 同步更新 CPA 凭证的启用/停用状态。
+func (s *Service) SetCredentialStatus(ctx context.Context, id string, disabled bool) error {
+	if id == "" {
+		return bad("凭证 ID 不能为空")
+	}
+	updater, ok := s.adapter.(cpa.StatusUpdater)
+	if !ok {
+		return &apiError{501, "当前 CPA 适配器不支持切换凭证状态"}
+	}
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
+	live, err := s.adapter.ListCredentials(ctx)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, c := range live {
+		if c.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return &apiError{404, "Codex 凭证不存在或已移除"}
+	}
+	s.mu.Lock()
+	busy := s.credentialBusyLocked(id)
+	s.mu.Unlock()
+	if busy {
+		return &apiError{409, "该凭证正在巡检任务中，请先停止任务或等待完成"}
+	}
+	return updater.SetDisabled(ctx, id, disabled)
+}
+
 func (s *Service) credentialBusyLocked(id string) bool {
 	for _, task := range s.state.Tasks {
 		if task.Status != "running" {

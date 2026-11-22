@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { clearInspectionHistory } from '../store/historyActions'
 import { useStore } from '../store/store'
 import { SettingsPanel } from './SettingsPanel'
-import { Modal } from './ui'
+import { Icon, Modal } from './ui'
 
 export function ClearHistoryPanel() {
   const connected = useStore((state) => state.connection === 'connected')
@@ -30,12 +30,16 @@ export function ClearHistoryPanel() {
     }
   }
 
-  return <SettingsPanel title="历史巡检日志" desc="管理插件保存的巡检记录。">
-    <button type="button" className="btn btn-danger" disabled={disabled} onClick={() => setOpen(true)}>清空历史巡检日志</button>
+  return <SettingsPanel icon={<Icon.Database />} title="历史巡检日志" desc="清理插件保存的历史批次与证据数据。">
+    <div className="field-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+      清空将移除所有账号的历史巡检批次、结论、近况灯与连续异常累计；已应用的凭证分组、模型前缀、优先级与系统设置会完整保留。
+    </div>
+    <button type="button" className="btn btn-danger btn-sm" disabled={disabled} onClick={() => setOpen(true)}>清空历史巡检日志</button>
     {running && <p className="field-hint">请等待巡检结束后再清空。</p>}
-    <Modal open={open} onClose={close} title="清空历史巡检日志？"
+    <Modal open={open} onClose={close} title="清空历史巡检日志？" className="compact-modal"
       footer={<>
         <button type="button" className="btn" disabled={clearing} onClick={close}>取消</button>
+        <span className="spacer" />
         <button type="button" className="btn btn-danger" disabled={disabled} onClick={() => void confirm()}>
           {clearing ? '正在清空…' : '确认清空'}
         </button>

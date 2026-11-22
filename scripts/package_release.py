@@ -33,14 +33,39 @@ def release_identity(tag):
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     registry = json.loads((ROOT / "store/registry.json").read_text(encoding="utf-8"))
     plugin_id, version = package["name"], package["version"]
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", plugin_id):
+        raise ValueError("插件 ID 不符合 CLIProxyAPI 插件商店命名规范")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version) or (tag is not None and tag != "v" + version):
         raise ValueError("发布标签须与 package.json 中的三段版本一致")
-    if registry["plugins"][0]["id"] != plugin_id:
+    if registry.get("schema_version") != 1:
+        raise ValueError("商店清单 schema_version 必须为 1")
+    plugins = registry.get("plugins") or []
+    if len(plugins) != 1 or plugins[0].get("id") != plugin_id:
         raise ValueError("商店插件 ID 与包名不一致")
+    repository = plugins[0].get("repository", "")
+    if not re.fullmatch(r"https://github\.com/[^/]+/[^/]+", repository):
+        raise ValueError("商店仓库地址必须为 https://github.com/{owner}/{repo}")
+    pkg_repo = re.sub(r"^git\+|\.git$", "", (package.get("repository") or {}).get("url", ""))
+    if pkg_repo != repository:
+        raise ValueError("package.json 与 store/registry.json 的仓库地址不一致")
     source = (ROOT / "cmd/downshift/plugin.go").read_text(encoding="utf-8")
     for key, expected in (("pluginID", plugin_id), ("version", version)):
         if not re.search(rf'^const {key} = "{re.escape(expected)}"$', source, re.M):
             raise ValueError(f"插件注册的 {key} 与发布配置不一致")
+    if f'"GitHubRepository": "{repository}"' not in source:
+        raise ValueError("插件注册的 GitHubRepository 与 store/registry.json 不一致")
+    if not (ROOT / "assets/logo.svg").is_file():
+        raise ValueError("缺少插件 Logo 文件 assets/logo.svg")
+    logo = plugins[0].get("logo", "")
+    if logo and f'"Logo": "{logo}"' not in source:
+        raise ValueError("插件注册的 Logo 与 store/registry.json 不一致")
+    service_src = (ROOT / "internal/classifier/service.go").read_text(encoding="utf-8")
+    expected_prefix = f"/v0/management/plugins/{plugin_id}"
+    if not re.search(rf'^const apiPrefix = "{re.escape(expected_prefix)}"$', service_src, re.M):
+        raise ValueError("internal/classifier/service.go 的 apiPrefix 与插件 ID 不一致")
+    contract_src = (ROOT / "src/api/contract.ts").read_text(encoding="utf-8")
+    if not re.search(rf"^export const PLUGIN_ID = '{re.escape(plugin_id)}'$", contract_src, re.M):
+        raise ValueError("src/api/contract.ts 的 PLUGIN_ID 与插件 ID 不一致")
     return plugin_id, version
 
 
@@ -159,7 +184,7 @@ if __name__ == "__main__":
     action.add_argument("--platform", choices=PLATFORMS, help="打包一个已编译的平台")
     action.add_argument("--checksums", action="store_true", help="验证三个目标的归档并生成 checksums.txt")
     parser.add_argument("--arch", choices=("amd64", "arm64"), help="打包目标架构，默认为 amd64")
-    parser.add_argument("--tag", help="核对发布标签，例如 v0.1.3")
+    parser.add_argument("--tag", help="核对发布标签，例如 v0.1.5")
     parser.add_argument("--go-exe", default="go", help="读取 Go 构建信息的命令或路径，默认为 go")
     args = parser.parse_args()
     arch = args.arch or "amd64"

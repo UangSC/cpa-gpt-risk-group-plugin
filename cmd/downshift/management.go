@@ -12,7 +12,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/web"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/web"
 )
 
 type managementRequest struct {
@@ -31,10 +31,10 @@ type managementResponse struct {
 func managementRegistration() (any, error) {
 	routes := []map[string]string{}
 	// CPA plugin management routes are fixed paths and reject :param / *wildcard.
-	for _, item := range [][2]string{{"GET", "/snapshot"}, {"POST", "/checks"}, {"POST", "/quota/refresh"}, {"GET", "/tasks"}, {"POST", "/tasks/cancel"}, {"POST", "/sync"}, {"PUT", "/settings"}, {"PUT", "/routing"}, {"POST", "/exclusions"}, {"POST", "/history/clear"}} {
+	for _, item := range [][2]string{{"GET", "/snapshot"}, {"POST", "/checks"}, {"POST", "/quota/refresh"}, {"GET", "/tasks"}, {"POST", "/tasks/cancel"}, {"POST", "/sync"}, {"PUT", "/settings"}, {"PUT", "/routing"}, {"POST", "/exclusions"}, {"PUT", "/status"}, {"POST", "/history/clear"}} {
 		routes = append(routes, map[string]string{"method": item[0], "path": apiPrefix + item[1]})
 	}
-	resources := []map[string]string{{"path": "/ui", "menu": "Codex 降档检测与分类", "description": "真实 Codex 凭证巡检、分类与优先级路由"}}
+	resources := []map[string]string{{"path": "/ui", "menu": "Codex 风控检测与分类", "description": "真实 Codex 凭证巡检、分类与优先级路由"}}
 	err := fs.WalkDir(web.Assets(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

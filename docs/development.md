@@ -19,7 +19,7 @@ pnpm typecheck
 ./scripts/build.ps1 -Architecture amd64
 ```
 
-支持 Windows amd64、Linux amd64 和 Linux arm64。在 Linux ARM64 主机上使用 `-Architecture arm64`，也可以省略参数以使用当前 Go 工具链的主机架构。交叉构建时通过 `-Compiler` 指定目标平台的 C 编译器。工具未加入 PATH 时，可通过 `-GoExe`、`-Compiler` 或 `CPA_DOWNSHIFT_GO`、`CC` 进程变量指定路径。脚本会：
+支持 Windows amd64、Linux amd64 和 Linux arm64。在 Linux ARM64 主机上使用 `-Architecture arm64`，也可以省略参数以使用当前 Go 工具链的主机架构。交叉构建时通过 `-Compiler` 指定目标平台的 C 编译器。工具未加入 PATH 时，可通过 `-GoExe`、`-Compiler` 或 `CPA_RISK_GROUP_GO`（兼容 `CPA_DOWNSHIFT_GO`）、`CC` 进程变量指定路径。脚本会：
 
 1. 核对 Go 的插件 ID、注册版本与包配置，执行 TypeScript 检查和 Vite 构建。
 2. 将页面产物准备到 `web/dist/`，供 `go:embed` 使用。
@@ -44,19 +44,19 @@ python scripts/package_release.py --checksums --tag $tag
 
 ## 配置与部署
 
-参考 [配置示例](../examples/plugin-config.yaml)。`api_base` 只允许本机回环 HTTP 地址，`management_key` 使用已有 CPA 管理密钥；`state_dir` 留空时使用 CPA 可执行文件旁的 `plugin-data/cpa-codex-downshift-classifier/`。
+参考 [配置示例](../examples/plugin-config.yaml)。`api_base` 只允许本机回环 HTTP 地址，`management_key` 使用已有 CPA 管理密钥；`state_dir` 留空时使用 CPA 可执行文件旁的 `plugin-data/cpa-gpt-risk-group-plugin/`。若从旧插件名 `cpa-codex-downshift-classifier` 升级，保留原 `state_dir` 或将原 `plugin-data/cpa-codex-downshift-classifier/` 目录迁移至 `plugin-data/cpa-gpt-risk-group-plugin/` 即可继承历史记录与设置。
 
 ```powershell
 ./scripts/deploy-local.ps1 -CoreDir <CPA核心目录> -GuiConfig <EasyCLIProxyAPI配置文件>
 ```
 
-未使用 EasyCLIProxyAPI 时，可通过进程变量提供管理密钥，然后运行同一部署脚本。脚本仅通过官方配置 API 更新本插件节点，使用 `If-Match` 避免覆盖并发配置修改，并保留配置、原插件与状态备份。同版本重新构建会切换合法加载路径，以保证 CPA 实际重新加载新 DLL。
+未使用 EasyCLIProxyAPI 时，可通过 `CPA_RISK_GROUP_MANAGEMENT_KEY`（兼容 `CPA_DOWNSHIFT_MANAGEMENT_KEY`）进程变量提供管理密钥，然后运行同一部署脚本。脚本仅通过官方配置 API 更新本插件节点，使用 `If-Match` 避免覆盖并发配置修改，并保留配置、原插件与状态备份。同版本重新构建会切换合法加载路径，以保证 CPA 实际重新加载新 DLL。
 
 部署完成会输出已加载版本、页面地址和备份位置，并验证 CPA 内核哈希及其它插件注册状态。备份属于本机运行数据，不应加入源码提交。回退需要恢复对应备份中的插件文件、插件配置和状态，不能只替换 DLL。
 
 ## Codex 请求头
 
-默认头在 `internal/cpa/request_headers.go` 中维护，当前基线为 Codex CLI `0.170.0`。模型巡检与额度刷新共用这套默认值和已保存的覆盖项。巡检接收 SSE，额度查询接收 JSON，认证、账号和传输控制头由 CPA 管理。
+请求头默认策略在 `internal/cpa/request_headers.go` 中维护：未设置插件覆盖时，模型巡检仅传递基础内容协商头（`Content-Type` / `Accept`），直接沿用 CPA 内核的 Codex CLI 请求头配置；主动额度刷新优先读取 CPA 配置中的 `codex-header-defaults` / `header-defaults`，仅在 CPA 未配置时使用 Codex CLI `0.170.0` 兜底基线。巡检接收 SSE，额度查询接收 JSON，认证、账号和传输控制头由 CPA 管理。
 
 CPA 自带的 Codex 身份重设可能覆盖调用方的 User-Agent。需要调整宿主配置时，可显式运行：
 

@@ -2,11 +2,12 @@ package classifier
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync/atomic"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/fingerprint"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
 type StartRequest struct {
@@ -34,7 +35,7 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 		return "", bad("检测范围无效")
 	}
 	if q.Scope != "scheduled" && !q.AcknowledgeConfigChanges {
-		return "", &apiError{409, "请先确认巡检会修改凭证的模型前缀或优先级配置"}
+		return "", &apiError{409, "请先确认本次巡检配置"}
 	}
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
@@ -151,13 +152,9 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 	return task.ID, nil
 }
 func sortCredentials(c []cpa.Credential) { // 空闲或未知先执行，明确忙碌的账号稍后等待。
-	for i := 0; i < len(c); i++ {
-		for j := i + 1; j < len(c); j++ {
-			if c[i].Availability == "busy" && c[j].Availability != "busy" {
-				c[i], c[j] = c[j], c[i]
-			}
-		}
-	}
+	sort.SliceStable(c, func(i, j int) bool {
+		return c[i].Availability != "busy" && c[j].Availability == "busy"
+	})
 }
 func (s *Service) patchItem(taskID, targetID string, fn func(*RunItem)) {
 	s.mu.Lock()

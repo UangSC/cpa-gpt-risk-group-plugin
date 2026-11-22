@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
-const apiPrefix = "/v0/management/plugins/cpa-codex-downshift-classifier"
+const apiPrefix = "/v0/management/plugins/cpa-gpt-risk-group-plugin"
 
 type Service struct {
 	adapter          cpa.Adapter

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { DEFAULT_TOOLTIP_DELAY_MS, scheduleTooltipOpening, suppressSelectionReleaseClick } from '../../lib/tooltipInteraction'
 
@@ -6,7 +6,6 @@ import { DEFAULT_TOOLTIP_DELAY_MS, scheduleTooltipOpening, suppressSelectionRele
  * Small hover/focus card rendered in a portal so card `overflow: hidden` never clips it.
  * 鼠标悬浮和键盘焦点均按组件指定的延迟显示；主动点击固定气泡仍会立即打开。
  */
-/** A pinned tip lingers this long after the pointer leaves, then fades out. */
 const PIN_LINGER_MS = 1000
 const FADE_MS = 620
 
@@ -19,6 +18,9 @@ export function HoverCard({
   fadeOnHide = true,
   showDelay = DEFAULT_TOOLTIP_DELAY_MS,
   compact = false,
+  disabled = false,
+  wrapperClassName,
+  wrapperStyle,
 }: {
   content: ReactNode
   children: ReactNode
@@ -30,14 +32,21 @@ export function HoverCard({
   fadeOnHide?: boolean
   /** 悬浮或聚焦后显示气泡的等待毫秒数。 */
   showDelay?: number
-  /** 使用相同主题的两字小气泡，不携带额外操作说明。 */
+  /** 使用相同主题的紧凑小气泡，不携带额外操作说明。 */
   compact?: boolean
+  disabled?: boolean
+  wrapperClassName?: string
+  wrapperStyle?: CSSProperties
 }) {
   const [visible, setVisible] = useState(false)
   const [fading, setFading] = useState(false)
   const [pinned, setPinned] = useState(false)
   const [selecting, setSelecting] = useState(false)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [pos, setPos] = useState<{ left: number; top: number; placement: 'top' | 'bottom' }>({
+    left: 0,
+    top: 0,
+    placement,
+  })
   const anchor = useRef<HTMLSpanElement>(null)
   const tip = useRef<HTMLDivElement>(null)
   const pointerInside = useRef(false)
@@ -48,6 +57,7 @@ export function HoverCard({
   const hideTimer = useRef<number | null>(null)
   const fadeTimer = useRef<number | null>(null)
   const pinnedRef = useRef(false)
+  const blocked = disabled || content === null || content === undefined || content === false
 
   const hasSelectedText = useCallback(() => {
     const selection = window.getSelection()
@@ -67,31 +77,18 @@ export function HoverCard({
   }, [])
 
   const openNow = useCallback(() => {
+    if (blocked) return
     const el = anchor.current
     if (!el) return
     const rect = el.getBoundingClientRect()
-    setPos({ x: rect.left + rect.width / 2, y: placement === 'top' ? rect.top - 8 : rect.bottom + 8 })
+    setPos({
+      left: rect.left + rect.width / 2,
+      top: placement === 'top' ? rect.top - 8 : rect.bottom + 8,
+      placement,
+    })
     setFading(false)
     setVisible(true)
-  }, [placement])
-
-  /** Entering again during the linger or the fade cancels the pending close. */
-  const show = useCallback(() => {
-    clearTimers()
-    if (visible && pinnedRef.current) {
-      openNow()
-      return
-    }
-    // 未固定的气泡在重新进入时重新计时，不沿用上一段短暂悬浮。
-    if (visible) {
-      setVisible(false)
-      setFading(false)
-    }
-    showCleanup.current = scheduleTooltipOpening(() => {
-      showCleanup.current = null
-      openNow()
-    }, showDelay)
-  }, [clearTimers, openNow, showDelay, visible])
+  }, [blocked, placement])
 
   const hideNow = useCallback(() => {
     clearTimers()
@@ -101,10 +98,53 @@ export function HoverCard({
     setPinned(false)
   }, [clearTimers])
 
-  /**
-   * Leaving schedules the close. A pinned tip waits `PIN_LINGER_MS` first, so moving back
-   * inside during that window keeps it open; it then fades out over `FADE_MS`.
-   */
+  useEffect(() => {
+    if (blocked && visible) hideNow()
+  }, [blocked, visible, hideNow])
+
+  useLayoutEffect(() => {
+    if (!visible || !tip.current || !anchor.current) return
+    const rect = anchor.current.getBoundingClientRect()
+    const tipRect = tip.current.getBoundingClientRect()
+    const pad = 10
+    const gap = 8
+    let resolvedPlacement: 'top' | 'bottom' = placement
+    const spaceAbove = rect.top - gap - pad
+    const spaceBelow = window.innerHeight - rect.bottom - gap - pad
+    if (placement === 'top' && spaceAbove < tipRect.height && spaceBelow > spaceAbove) {
+      resolvedPlacement = 'bottom'
+    } else if (placement === 'bottom' && spaceBelow < tipRect.height && spaceAbove > spaceBelow) {
+      resolvedPlacement = 'top'
+    }
+    const rawTop = resolvedPlacement === 'top' ? rect.top - gap - tipRect.height : rect.bottom + gap
+    const clampedTop = Math.max(pad, Math.min(rawTop, Math.max(pad, window.innerHeight - tipRect.height - pad)))
+    const rawLeft = rect.left + rect.width / 2 - tipRect.width / 2
+    const clampedLeft = Math.max(pad, Math.min(rawLeft, Math.max(pad, window.innerWidth - tipRect.width - pad)))
+    setPos((prev) =>
+      prev.left === clampedLeft && prev.top === clampedTop && prev.placement === resolvedPlacement
+        ? prev
+        : { left: clampedLeft, top: clampedTop, placement: resolvedPlacement },
+    )
+  }, [visible, placement, content, compact])
+
+  /** Entering again during the linger or the fade cancels the pending close. */
+  const show = useCallback(() => {
+    if (blocked) return
+    clearTimers()
+    if (visible && pinnedRef.current) {
+      openNow()
+      return
+    }
+    if (visible) {
+      setVisible(false)
+      setFading(false)
+    }
+    showCleanup.current = scheduleTooltipOpening(() => {
+      showCleanup.current = null
+      openNow()
+    }, showDelay)
+  }, [blocked, clearTimers, openNow, showDelay, visible])
+
   const scheduleHide = useCallback(() => {
     if (selectionDrag.current || (pinnedRef.current && hasSelectedText())) return
     if (!fadeOnHide && !pinnedRef.current) {
@@ -207,6 +247,7 @@ export function HoverCard({
     <>
       <span
         ref={anchor}
+        className={wrapperClassName}
         onMouseEnter={show}
         onMouseLeave={scheduleHide}
         onFocus={(event) => { if (event.target.matches(':focus-visible')) show() }}
@@ -214,22 +255,22 @@ export function HoverCard({
         onClickCapture={pinOnClick ? undefined : hideNow}
         onClick={pinOnClick ? togglePin : undefined}
         data-pinned={pinned ? 'true' : undefined}
-        style={{ display: 'inline-flex' }}
+        style={wrapperStyle ?? (wrapperClassName ? undefined : { display: 'inline-flex' })}
       >
         {children}
       </span>
       {visible &&
+        !blocked &&
         createPortal(
           <div
             ref={tip}
-            className={`tip ${compact ? 'is-compact' : ''} ${fading ? 'is-fading' : ''} ${pinned ? 'is-pinned' : ''} ${selecting ? 'is-selecting-text' : ''} ${
+            className={`tip is-${pos.placement} ${compact ? 'is-compact' : ''} ${fading ? 'is-fading' : ''} ${pinned ? 'is-pinned' : ''} ${selecting ? 'is-selecting-text' : ''} ${
               pinOnClick ? 'has-hint' : ''
             }`}
             role="tooltip"
             style={{
-              left: pos.x,
-              top: pos.y,
-              transform: placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+              left: pos.left,
+              top: pos.top,
             }}
             onMouseEnter={() => { pointerInside.current = true; if (pinnedRef.current) show() }}
             onMouseLeave={() => { pointerInside.current = false; if (pinnedRef.current) scheduleHide() }}

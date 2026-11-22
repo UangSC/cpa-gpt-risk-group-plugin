@@ -1,11 +1,11 @@
 {
-  "name": "cpa-codex-downshift-classifier",
+  "name": "cpa-gpt-risk-group-plugin",
   "private": true,
   "version": "0.1.5",
-  "description": "通过 CPA 官方宿主接口检测和分类 Codex 凭证的开发中插件",
+  "description": "适用于 CLIProxyAPI 的 Codex 凭证风控检测与分组管理插件",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/UangSC/cpa-codex-downshift-classifier.git"
+    "url": "git+https://github.com/UangSC/cpa-gpt-risk-group-plugin.git"
   },
   "type": "module",
   "engines": {

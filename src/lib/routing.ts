@@ -1,7 +1,7 @@
 import type { Credential, RoutingSettings, RoutingValues } from '../types'
 
 export const DEFAULT_ROUTING: RoutingSettings = {
-  mode: 'prefix',
+  mode: 'none',
   groups: {
     normal: { priority: 10, weight: 10 },
     downshift: { priority: -10, weight: 1 },
@@ -23,8 +23,9 @@ export function normalizeRouting(value?: Partial<RoutingSettings>): RoutingSetti
     priority: normalizeRoutingValue(values?.priority ?? defaults.priority, 'priority'),
     weight: normalizeRoutingValue(values?.weight ?? defaults.weight, 'weight'),
   })
+  const mode = value?.mode === 'prefix' || value?.mode === 'priority' || value?.mode === 'none' ? value.mode : 'none'
   return {
-    mode: value?.mode === 'priority' ? 'priority' : 'prefix',
+    mode,
     groups: {
       normal: normalize(value?.groups?.normal, DEFAULT_ROUTING.groups.normal),
       downshift: normalize(value?.groups?.downshift, DEFAULT_ROUTING.groups.downshift),

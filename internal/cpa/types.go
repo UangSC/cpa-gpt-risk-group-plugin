@@ -24,6 +24,16 @@ type QuotaRefresher interface {
 	RestoreQuota(string, Quota)
 }
 
+// StatusUpdater 通过 CPA 官方管理接口同步凭证的启用/停用状态。
+type StatusUpdater interface {
+	SetDisabled(context.Context, string, bool) error
+}
+
+// HeaderProfileProvider 读取 CPA 内核当前生效的 Codex CLI 请求头默认配置。
+type HeaderProfileProvider interface {
+	RequestHeaderProfile(context.Context) RequestHeaderProfile
+}
+
 // Credential is a sanitized host record; it never carries authentication secrets.
 type Credential struct {
 	ID, Name, File, Plan, AuthIndex, Prefix string

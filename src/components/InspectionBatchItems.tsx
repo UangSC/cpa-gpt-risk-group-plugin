@@ -30,7 +30,7 @@ function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: n
   const { round, item, target, credential } = entry
   const outcome = round?.outcome
   const tone = round ? roundTone(round) : item?.state === 'running' ? 'uncertain' : 'empty'
-  const label = round ? outcome === 'normal' ? '正常' : outcome === 'downshift' ? '降档' : outcome === 'uncertain' ? '不确定' : outcome === 'cancelled' ? '已取消' : '未能检测'
+  const label = round ? outcome === 'normal' ? '正常' : outcome === 'downshift' ? '风控' : outcome === 'uncertain' ? '不确定' : outcome === 'cancelled' ? '已取消' : '未能检测'
     : item ? RUN_STATE_LABEL[item.state] : '未完成'
   const statusTone: ChipTone = round ? outcome === 'normal' ? 'normal' : outcome === 'downshift' ? 'downshift' : outcome === 'uncertain' ? 'uncertain' : 'plain' : stateTone(item?.state ?? '')
   const model = target?.model ?? entry.targetId.split('::').at(-1) ?? '未知模型'

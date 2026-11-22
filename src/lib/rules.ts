@@ -37,11 +37,7 @@ export function retrySentence(policy: RetryPolicy): string {
 export function failureRuleSentence(settings: Settings): string {
   const n = settings.failureRule.windowRounds
   const threshold = settings.failureRule.requestThreshold ?? 3
-  return `本轮真实 502、503、429 累计达到 ${threshold} 次立即判定降档，混合状态也累计，无需等待多轮；未达次数门槛时，连续 ${n} 轮以同类异常失败也会降档。完整通过会打断跨轮累计；401/403、网络错误和本地预检不计入这三类异常。`
-}
-
-export function quotaWindowLabel(minPercent: number): string {
-  return `剩余额度高于 ${minPercent}%`
+  return `本轮真实 502、503、429 累计达到 ${threshold} 次立即判定风控，混合状态也累计，无需等待多轮；未达次数门槛时，连续 ${n} 轮以同类异常失败也会归为风控。完整通过会打断跨轮累计；401/403、网络错误和本地预检不计入这三类异常。`
 }
 
 /** "仅当凭证最低剩余额度高于 15% 时执行检测；额度未知时仍然检测。" */
@@ -50,7 +46,7 @@ export function quotaSentence(settings: Settings): string {
   const policy =
     gate.unknownPolicy === 'check'
       ? '额度未知时仍然检测，并在卡片上标注额度未知。'
-      : '额度未知时跳过，不计入降档。'
+      : '额度未知时跳过，不计入风控。'
   return `仅当凭证所有已知额度窗口中最低的剩余比例高于 ${gate.minRemainingPercent}% 时执行检测；${policy}`
 }
 
@@ -59,13 +55,9 @@ export function testLabel(tests: TestKind[]): string {
   return tests.map(methodLabel).join(' + ')
 }
 
-export function testShort(kind: TestKind): string {
-  return methodLabel(kind)
-}
-
 export const VERDICT_LABEL: Record<Verdict, string> = {
   normal: '正常',
-  downshift: '降档',
+  downshift: '风控',
   uncertain: '不确定',
   untested: '未检测',
 }
@@ -99,21 +91,13 @@ export const REASON_DESC: Record<ReasonCode, string> = {
   'fingerprint-anomaly': '三次有效结果未满足正常条件：目标参考不匹配，或目标归因概率未严格大于 90%。',
   'fingerprint-insufficient': '不足三份有效数字序列，或请求模型尚未登记到参考库，因此本轮保持不确定。',
   'repeated-service-errors':
-    '502、503、429 混合计入同一类频繁异常。达到单轮请求门槛就停止本轮并归入降档；恢复需要新一轮完整通过。',
+    '502、503、429 混合计入同一类频繁异常。达到单轮请求门槛就停止本轮并归入风控；恢复需要新一轮完整通过。',
   'single-service-error':
     '本轮异常尚未达到单轮次数或跨轮补充门槛，暂不改变分组；后续巡检仍按当前规则判断。',
   'auth-expired': '凭证认证失效，无法发起检测。这属于凭证状态问题，不代表模型能力下降。',
   'quota-exhausted':
-    '额度已用尽或请求正在排队，无法发起检测。这属于凭证状态问题，不等于模型降档；分组保持不变。',
+    '额度已用尽或请求正在排队，无法发起检测。这属于凭证状态问题，不等于模型风控；分组保持不变。',
   cancelled: '检测被取消，本轮没有形成完整结论，分组保持不变。',
   'no-model-response': '请求成功但模型未返回可判定的回答。',
   'method-result': '该轮结果由所选检测方式提供。',
-}
-
-/**
- * Whether a round outcome moves the group. Uncertain / cancelled / blocked rounds must
- * keep whatever prefix is already applied.
- */
-export function outcomeChangesGroup(outcome: string): boolean {
-  return outcome === 'normal' || outcome === 'downshift'
 }

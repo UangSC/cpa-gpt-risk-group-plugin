@@ -3,11 +3,24 @@ package classifier
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 )
 
 func cloneSchedule(s Schedule) Schedule { s.NextRunAt = nil; return s }
+func normalizeScheduleDefaults(s *Schedule, fallbackMinRemaining float64) {
+	if s.BusySessionPolicy == "" {
+		s.BusySessionPolicy = "under-limit"
+	}
+	if s.MaxBusySessions == 0 {
+		s.MaxBusySessions = 3
+	}
+	if s.MinRemainingPercent == nil {
+		value := fallbackMinRemaining
+		s.MinRemainingPercent = &value
+	}
+}
 func validateSchedule(s Schedule) error {
 	if s.Mode != "interval" && s.Mode != "daily" && s.Mode != "windows" {
 		return bad("定时模式无效")
@@ -18,7 +31,26 @@ func validateSchedule(s Schedule) error {
 	if _, err := time.Parse("15:04", s.DailyTime); err != nil {
 		return bad("每日时间无效")
 	}
-	if !s.Enabled || s.Mode != "windows" {
+	if s.MinRemainingPercent != nil && (math.IsNaN(*s.MinRemainingPercent) || math.IsInf(*s.MinRemainingPercent, 0) || *s.MinRemainingPercent < 0 || *s.MinRemainingPercent > 100) {
+		return bad("定时巡检额度门槛必须为 0～100")
+	}
+	if s.BusySessionPolicy != "" && s.BusySessionPolicy != "always" && s.BusySessionPolicy != "under-limit" && s.BusySessionPolicy != "skip-busy" {
+		return bad("定时巡检活跃会话处理策略无效")
+	}
+	policy := s.BusySessionPolicy
+	if policy == "" {
+		policy = "under-limit"
+	}
+	if policy == "under-limit" && s.MaxBusySessions != 0 && (s.MaxBusySessions < 1 || s.MaxBusySessions > 99) {
+		return bad("并发会话上限必须为 1～99 的整数")
+	}
+	if !s.Enabled {
+		return nil
+	}
+	if policy == "under-limit" && (s.MaxBusySessions < 1 || s.MaxBusySessions > 99) {
+		return bad("并发会话上限必须为 1～99 的整数")
+	}
+	if s.Mode != "windows" {
 		return nil
 	}
 	windows := append([]TimeWindow{}, s.Windows...)

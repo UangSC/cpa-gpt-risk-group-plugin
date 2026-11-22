@@ -1,7 +1,8 @@
 import type { Settings } from '../types'
 import { currentManagementKey } from '../api/auth'
 
-const STORAGE_KEY = 'cpa-downshift:manual-consent:v1'
+const STORAGE_KEY = 'cpa-gpt-risk-group:manual-consent:v1'
+const LEGACY_STORAGE_KEY = 'cpa-downshift:manual-consent:v1'
 
 /** 权重不由插件写入，检测参数不改变这里授权的前缀/优先级写入政策。 */
 export function manualWritePolicy(settings: Settings): string {
@@ -26,7 +27,8 @@ export async function canSkipManualReminder(settings: Settings, key = currentMan
   const value = await binding(settings, key)
   if (!value) return false
   try {
-    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? 'null')
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY)
+    const saved = JSON.parse(raw ?? 'null')
     return saved?.version === 1 && saved.binding === value
   } catch { return false }
 }
@@ -40,5 +42,8 @@ export async function rememberManualReminder(settings: Settings, requestKey: str
 }
 
 export function restoreManualReminder(): void {
-  try { window.localStorage.removeItem(STORAGE_KEY) } catch { /* 存储不可用时仍按正常弹窗处理。 */ }
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY)
+  } catch { /* 存储不可用时仍按正常弹窗处理。 */ }
 }

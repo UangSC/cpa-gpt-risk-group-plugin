@@ -1,24 +1,33 @@
 // 前端操作编排：检查资格、确认写入权限并提交 CPA 管理请求；不在浏览器推理。
 import { backend, type RoutingRequest } from '../api'
-import type { InspectionTask, Settings, Target, InspectionConfirmation } from '../types'
-import { lowestQuota } from '../lib/derive'
+import type { Credential, InspectionTask, Settings, Target, InspectionConfirmation } from '../types'
+import { isManuallyExcluded, lowestQuota } from '../lib/derive'
 import { useStore } from './store'
 import { refreshSnapshot } from './live'
+import { activeInspectionCredentialIds } from './exclusions'
 import { currentManagementKey } from '../api/auth'
 import { canSkipManualReminder, manualWritePolicy, rememberManualReminder, restoreManualReminder } from '../lib/manualInspectionConsent'
 
 let preparingInspection = false
 
 export interface Eligibility { runnable: boolean; mustWait?: boolean; note: string }
-export function evaluateEligibility(target: Target, settings: Settings): Eligibility {
-  const credential = useStore.getState().credentials.find((item) => item.id === target.credentialId)
+export function evaluateEligibility(
+  target: Target,
+  settings: Settings,
+  preloadedCredential?: Credential,
+  busySets?: { togglingStatus: ReadonlySet<string>; excluding: ReadonlySet<string> },
+): Eligibility {
+  const state = useStore.getState()
+  const credential = preloadedCredential ?? state.credentials.find((item) => item.id === target.credentialId)
   if (!credential) return { runnable: false, note: '凭证已不存在' }
-  if (credential.inspectionExcluded) return { runnable: false, note: '该凭证不参与巡检，请先从侧边抽屉恢复参与' }
-  if (useStore.getState().excluding.includes(credential.id)) return { runnable: false, note: '该凭证的参与状态正在更新' }
-  if (credential.auth === 'expired') return { runnable: false, note: '认证失效：需要重新登录，不属于模型降档' }
+  if (credential.disabled) return { runnable: false, note: '该凭证已关闭，不参与巡检' }
+  if (isManuallyExcluded(credential)) return { runnable: false, note: '该凭证不参与巡检，请先从侧边抽屉恢复参与' }
+  if (busySets ? busySets.togglingStatus.has(credential.id) : state.togglingStatus.includes(credential.id)) return { runnable: false, note: '该凭证开启状态正在切换' }
+  if (busySets ? busySets.excluding.has(credential.id) : state.excluding.includes(credential.id)) return { runnable: false, note: '该凭证的参与状态正在更新' }
+  if (credential.auth === 'expired') return { runnable: false, note: '认证失效：需要重新登录，不属于模型风控' }
   if (credential.unavailable) return { runnable: false, note: 'CPA 当前报告此凭证不可用或处于冷却，暂不检测' }
   const lowest = lowestQuota(credential)
-  if (credential.quota.status === 'exhausted' || lowest === 0) return { runnable: false, note: '额度已用尽，不属于模型降档' }
+  if (credential.quota.status === 'exhausted' || lowest === 0) return { runnable: false, note: '额度已用尽，不属于模型风控' }
   if (lowest === null && settings.quota.unknownPolicy === 'skip') return { runnable: false, note: '额度未知：按设置跳过检测' }
   if (lowest !== null && lowest <= settings.quota.minRemainingPercent) return { runnable: false, note: `剩余额度不高于阈值 ${settings.quota.minRemainingPercent}%，本轮跳过` }
   return { runnable: true, mustWait: credential.availability === 'busy', note: credential.availability === 'busy' ? '凭证会话中，等待空闲' : lowest === null ? '额度未知，仍按设置检测' : '' }
@@ -27,11 +36,17 @@ function notifyError(title: string, error: unknown) {
   useStore.getState().notify({ tone: 'danger', title, detail: error instanceof Error ? error.message : String(error) })
 }
 /** 概览快捷设置与设置页共用保存校验和已启用计划的配置确认。 */
-export async function saveInspectionOptions(patch: Partial<Pick<Settings, 'inspectionMethod' | 'concurrency'>>): Promise<boolean> {
+export async function saveInspectionOptions(
+  patch: Partial<Pick<Settings, 'inspectionMethod' | 'concurrency' | 'inspectionModel' | 'reasoningEffort' | 'prefixes' | 'routing'>>,
+): Promise<boolean> {
   const state = useStore.getState()
   if (state.connection !== 'connected' || state.settingsSaving || state.starting || state.settingsDraft || state.inspectionConfirmation || state.pendingSettingsConfirmation || state.tasks.some((task) => task.status === 'running')) return false
   if ((patch.inspectionMethod === undefined || patch.inspectionMethod === state.settings.inspectionMethod)
-    && (patch.concurrency === undefined || patch.concurrency.maxObjects === state.settings.concurrency.maxObjects)) return true
+    && (patch.concurrency === undefined || patch.concurrency.maxObjects === state.settings.concurrency.maxObjects)
+    && (patch.inspectionModel === undefined || patch.inspectionModel.trim() === state.settings.inspectionModel)
+    && (patch.reasoningEffort === undefined || patch.reasoningEffort === state.settings.reasoningEffort)
+    && (patch.prefixes === undefined || (patch.prefixes.normal === state.settings.prefixes.normal && patch.prefixes.downshift === state.settings.prefixes.downshift))
+    && (patch.routing === undefined || JSON.stringify(patch.routing) === JSON.stringify(state.settings.routing))) return true
   state.editSettingsDraft(patch)
   const saved = await state.saveSettingsDraft()
   if (!saved && !useStore.getState().pendingSettingsConfirmation) useStore.setState({ settingsDraft: null })
@@ -98,7 +113,7 @@ function eligibleIds(ids: string[]): string[] {
 function confirmation(scope: 'manual' | 'batch', ids: string[], requestedCount: number): InspectionConfirmation {
   const state = useStore.getState()
   return { scope, credentialIds: ids, settings: structuredClone(state.settings), revision: state.configChangesRevision,
-    requestedCount, excludedCount: state.credentials.filter((entry) => entry.inspectionExcluded || state.excluding.includes(entry.id)).length }
+    requestedCount, excludedCount: state.credentials.filter((entry) => isManuallyExcluded(entry) || state.excluding.includes(entry.id)).length }
 }
 
 /** 唯一提交入口：只有“我已知晓”的点击处理调用，并绑定已展示的配置版本。 */
@@ -118,7 +133,7 @@ async function submitInspection(pending: InspectionConfirmation, rememberNextTim
     useStore.setState({ inspectionConfirmation: confirmation(pending.scope, eligible, pending.requestedCount), inspectionConfirmError: '巡检配置或参与范围已变化，请核对更新后的内容并再次点击“我已知晓”。' })
     return null
   }
-  useStore.setState({ starting: true, inspectionConfirmError: '', mutationVersion: state.mutationVersion + 1 })
+  useStore.setState({ starting: true, startingCredentialIds: eligible, inspectionConfirmError: '', mutationVersion: state.mutationVersion + 1 })
   const requestKey = currentManagementKey()
   try {
     const response = await backend.startChecks({ credentialIds: eligible, scope: pending.scope,
@@ -129,7 +144,11 @@ async function submitInspection(pending: InspectionConfirmation, rememberNextTim
     }
     else if (!rememberNextTime && explicitConfirmation && currentManagementKey() === requestKey) restoreManualReminder()
     useStore.setState({ inspectionConfirmation: null, inspectionConfirmError: '' })
-    state.setRunPanel(true)
+    useStore.getState().notify({
+      tone: 'info',
+      title: '巡检已开始',
+      detail: `正在检测 ${eligible.length} 个凭证，可点击右上角「巡检中」查看批次进度。`,
+    })
     await refreshSnapshot(true)
     return response.taskId
   } catch (error) {
@@ -141,7 +160,7 @@ async function submitInspection(pending: InspectionConfirmation, rememberNextTim
     if (latest.connection !== 'connected') notifyError('巡检尚未开始', error)
     return null
   }
-  finally { useStore.setState({ starting: false }) }
+  finally { useStore.setState({ starting: false, startingCredentialIds: [] }) }
 }
 export async function cancelTask(id: string) {
   useStore.setState((state) => ({ mutationVersion: state.mutationVersion + 1 }))
@@ -157,6 +176,57 @@ export async function resyncCredential(id: string) {
   } catch (error) { notifyError('分组同步失败', error) }
   finally { useStore.setState((state) => ({ syncing: state.syncing.filter((value) => value !== id) })) }
 }
+export async function setCredentialDisabled(credentialId: string, disabled: boolean): Promise<boolean> {
+  const state = useStore.getState()
+  if (state.connection !== 'connected') return false
+  if (state.togglingStatus.includes(credentialId) || state.excluding.includes(credentialId) || state.syncing.includes(credentialId)) return false
+  if (activeInspectionCredentialIds(state).includes(credentialId)) {
+    state.notify({ tone: 'warning', title: '无法切换凭证状态', detail: '该凭证正在巡检中，请等待完成或停止任务后再切换开关' })
+    return false
+  }
+  const requestKey = currentManagementKey()
+  useStore.setState((current) => ({
+    togglingStatus: [...new Set([...current.togglingStatus, credentialId])],
+    mutationVersion: current.mutationVersion + 1,
+  }))
+  let committed = false
+  try {
+    await backend.setCredentialStatus({ credentialId, disabled })
+    committed = true
+    if (currentManagementKey() !== requestKey) return false
+    useStore.setState((current) => ({
+      credentials: current.credentials.map((credential) =>
+        credential.id === credentialId ? { ...credential, disabled } : credential,
+      ),
+      selected: disabled ? current.selected.filter((id) => id !== credentialId) : current.selected,
+    }))
+    const refreshed = await refreshSnapshot(true)
+    if (currentManagementKey() !== requestKey) return true
+    useStore.getState().notify({
+      tone: refreshed ? 'success' : 'warning',
+      title: disabled ? '已关闭凭证' : '已开启凭证',
+      detail: refreshed
+        ? disabled
+          ? '已同步至 CLIProxyAPI，关闭后不参与巡检且不可勾选。'
+          : '已同步至 CLIProxyAPI，凭证已恢复参与。'
+        : '状态已提交，当前刷新暂不可用，请重新连接后确认。',
+    })
+    return true
+  } catch (error) {
+    if (currentManagementKey() === requestKey) {
+      notifyError(disabled ? '关闭凭证失败' : '开启凭证失败', error)
+    }
+    return false
+  } finally {
+    useStore.setState((current) => ({
+      togglingStatus: current.togglingStatus.filter((id) => id !== credentialId),
+    }))
+    if (!committed && currentManagementKey() === requestKey) {
+      await refreshSnapshot(true)
+    }
+  }
+}
+
 export async function saveCredentialRouting(request: RoutingRequest) {
   const state = useStore.getState()
   if (state.connection !== 'connected' || state.syncing.includes(request.credentialId)) return

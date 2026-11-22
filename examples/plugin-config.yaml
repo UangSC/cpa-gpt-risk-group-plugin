@@ -2,7 +2,7 @@
 # 完整配置与凭证文件不要提交到源码仓库。
 plugins:
   configs:
-    cpa-codex-downshift-classifier:
+    cpa-gpt-risk-group-plugin:
       enabled: true
       api_base: http://127.0.0.1:8317
       management_key: ""

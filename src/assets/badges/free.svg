@@ -1,17 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="26" viewBox="0 0 96 26" role="img" aria-label="FREE">
   <title>FREE</title>
+  <style>
+    .rim { animation: free-rim 7.4s ease-in-out infinite; }
+    @keyframes free-rim { 0%, 100% { stroke-opacity: 0.45; } 50% { stroke-opacity: 0.88; } }
+    @media (prefers-reduced-motion: reduce) { .rim { animation: none; } }
+  </style>
   <defs>
     <linearGradient id="surface" x1="0" y1="0" x2=".24" y2="1">
-      <stop stop-color="#fdfeff"/>
-      <stop offset=".46" stop-color="#f0f5fa"/>
-      <stop offset="1" stop-color="#e2ebf4"/>
+      <stop stop-color="#ffffff"/>
+      <stop offset=".48" stop-color="#f1f5fa"/>
+      <stop offset="1" stop-color="#dfe8f2"/>
     </linearGradient>
     <linearGradient id="edge" x1="0" y1="0" x2=".3" y2="1">
-      <stop stop-color="#dde8f4"/>
-      <stop offset="1" stop-color="#aabdd2"/>
+      <stop stop-color="#dbe6f2"/>
+      <stop offset="1" stop-color="#a8bcd1"/>
     </linearGradient>
   </defs>
   <rect x=".5" y=".5" width="95" height="25" rx="6.5" fill="url(#surface)" stroke="url(#edge)"/>
-  <path d="M6.5 2h83a4.5 4.5 0 0 1 4.5 4.5M2 6.5A4.5 4.5 0 0 1 6.5 2" fill="none" stroke="#ffffff" stroke-opacity=".98"/>
+  <path class="rim" d="M6.5 2h83a4.5 4.5 0 0 1 4.5 4.5M2 6.5A4.5 4.5 0 0 1 6.5 2" fill="none" stroke="#ffffff" stroke-opacity=".8"/>
   <path fill="#2c3b50" transform="translate(-11 0)" d="M43.004 8.398H48.944V9.828H44.642V12.35H48.697V13.728H44.642V17.602H43.004ZM51.155 8.398H54.353Q55.003 8.398 55.614 8.535Q56.225 8.671 56.699 8.983Q57.174 9.295 57.46 9.802Q57.745 10.309 57.745 11.037Q57.745 12.038 57.18 12.668Q56.614 13.299 55.64 13.52L58.097 17.602H56.12L53.989 13.702H52.793V17.602H51.155ZM54.132 12.363Q54.483 12.363 54.834 12.311Q55.184 12.259 55.464 12.116Q55.744 11.973 55.925 11.707Q56.108 11.44 56.108 11.024Q56.108 10.647 55.939 10.407Q55.77 10.166 55.51 10.023Q55.25 9.88 54.918 9.828Q54.587 9.776 54.275 9.776H52.793V12.363ZM60.033 8.398H66.13V9.828H61.671V12.168H65.896V13.546H61.671V16.146H66.364V17.602H60.033ZM68.665 8.398H74.763V9.828H70.303V12.168H74.528V13.546H70.303V16.146H74.996V17.602H68.665Z"/>
 </svg>

@@ -1,7 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { LightTone } from '../../lib/derive'
-import type { Verdict } from '../../types'
-import { VERDICT_LABEL } from '../../lib/rules'
 
 export function Dot({ tone }: { tone: LightTone }) {
   return <span className={`dot dot-${tone}`} aria-hidden="true" />
@@ -31,15 +29,6 @@ export function Chip({
   return (
     <span className={`chip ${cls} ${dot ? 'chip-dot' : ''}`}>
       {children}
-    </span>
-  )
-}
-
-export function VerdictPill({ verdict }: { verdict: Verdict }) {
-  return (
-    <span className={`verdict verdict-${verdict}`}>
-      <Dot tone={verdict === 'untested' ? 'empty' : verdict} />
-      {VERDICT_LABEL[verdict]}
     </span>
   )
 }
@@ -109,25 +98,39 @@ export function Segmented<T extends string>({
   )
 }
 
-/** Ticking clock so relative times and countdowns stay honest without a global timer. */
-export function useNow(intervalMs = 30_000) {
+/** Ticking clock so relative times and countdowns stay honest without wasting idle cycles when hidden/disabled. */
+export function useNow(intervalMs = 30_000, enabled = true) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs)
-    return () => window.clearInterval(timer)
-  }, [intervalMs])
+    if (!enabled) return
+    const tick = () => {
+      if (typeof document === 'undefined' || !document.hidden) setNow(Date.now())
+    }
+    tick()
+    const timer = window.setInterval(tick, intervalMs)
+    const onVisibility = () => {
+      if (!document.hidden) setNow(Date.now())
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [intervalMs, enabled])
   return now
 }
 
 export function QuotaMeter({
   windows,
   threshold,
+  refreshing = false,
 }: {
   windows: { key: string; remainingPercent: number | null }[]
   threshold: number
+  refreshing?: boolean
 }) {
   return (
-    <div className="quota">
+    <div className={`quota${refreshing ? ' is-quota-refreshing' : ''}`}>
       {windows.map((w) => {
         const value = w.remainingPercent
         const low = value != null && value <= threshold

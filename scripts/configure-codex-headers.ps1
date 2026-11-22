@@ -1,8 +1,8 @@
-param(
+﻿param(
     [Parameter(Mandatory)][string]$CoreDir,
     [Parameter(Mandatory)][string]$UserAgent,
     [string]$ApiBase = 'http://127.0.0.1:8317',
-    [string]$ManagementKey = $env:CPA_DOWNSHIFT_MANAGEMENT_KEY,
+    [string]$ManagementKey = $(if ($env:CPA_RISK_GROUP_MANAGEMENT_KEY) { $env:CPA_RISK_GROUP_MANAGEMENT_KEY } else { $env:CPA_DOWNSHIFT_MANAGEMENT_KEY }),
     [string]$GuiConfig
 )
 $ErrorActionPreference = 'Stop'

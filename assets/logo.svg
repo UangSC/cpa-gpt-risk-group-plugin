@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="CPA GPT Risk Group Plugin Logo">
+  <defs>
+    <linearGradient id="bgGrad" x1="20" y1="16" x2="236" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#172554" />
+      <stop offset="52%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+    <radialGradient id="topGlow" cx="0.28" cy="0.2" r="0.72">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.42" />
+      <stop offset="60%" stop-color="#3b82f6" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="shieldStroke" x1="128" y1="48" x2="128" y2="208" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#bfdbfe" stop-opacity="0.92" />
+    </linearGradient>
+    <linearGradient id="shieldFill" x1="128" y1="52" x2="128" y2="206" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14" />
+      <stop offset="100%" stop-color="#93c5fd" stop-opacity="0.04" />
+    </linearGradient>
+    <linearGradient id="branchLeft" x1="128" y1="138" x2="94" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <linearGradient id="branchRight" x1="128" y1="138" x2="162" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#fbbf24" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square badge background -->
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#bgGrad)" />
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#topGlow)" />
+  <rect x="12.75" y="12.75" width="230.5" height="230.5" rx="53.25" stroke="#ffffff" stroke-opacity="0.2" stroke-width="1.5" />
+
+  <!-- Minimalist protective shield -->
+  <path
+    d="M128 48L188 70V125C188 164 156 192 128 206C100 192 68 164 68 125V70L128 48Z"
+    fill="url(#shieldFill)"
+    stroke="url(#shieldStroke)"
+    stroke-width="11"
+    stroke-linejoin="round"
+  />
+
+  <!-- Stem + Dual group routing branches -->
+  <path
+    d="M128 176V140"
+    stroke="#e0e7ff"
+    stroke-opacity="0.92"
+    stroke-width="8.5"
+    stroke-linecap="round"
+  />
+  <path
+    d="M128 138C122 121 110 110 95 98"
+    stroke="url(#branchLeft)"
+    stroke-width="8.5"
+    stroke-linecap="round"
+  />
+  <path
+    d="M128 138C134 121 146 110 161 98"
+    stroke="url(#branchRight)"
+    stroke-width="8.5"
+    stroke-linecap="round"
+  />
+
+  <!-- Normal group emerald beacon (left) -->
+  <circle cx="95" cy="98" r="19" fill="#34d399" fill-opacity="0.22" />
+  <circle cx="95" cy="98" r="11.5" fill="#34d399" stroke="#ecfdf5" stroke-width="2.5" />
+
+  <!-- Risk group amber beacon (right) -->
+  <circle cx="161" cy="98" r="19" fill="#fbbf24" fill-opacity="0.22" />
+  <circle cx="161" cy="98" r="11.5" fill="#fbbf24" stroke="#fffbeb" stroke-width="2.5" />
+
+  <!-- Central inspection diamond core -->
+  <path
+    d="M128 122L142 136L128 150L114 136Z"
+    fill="#ffffff"
+  />
+</svg>

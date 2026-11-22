@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import pluginLogo from '../../assets/logo.svg'
 import { useStore } from '../store/store'
 import { loginWithKey, reconnect } from '../store/live'
 import { forgetRememberedManagementKey, hasRememberedManagementKey } from '../api/auth'
@@ -30,9 +31,11 @@ export function ConnectionPanel() {
 
   return <main className="login-screen">
     <section className="login-card" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-describedby="login-description">
-      <div className="login-brand" aria-hidden="true">◈</div>
+      <div className="login-brand" aria-hidden="true">
+        <img src={pluginLogo} alt="" className="login-brand-img" />
+      </div>
       <h1 id="login-title">管理员登录</h1>
-      <p id="login-description">输入 CPA 管理密钥，进入 Codex 降档检测插件。</p>
+      <p id="login-description">输入 CPA 管理密钥，进入 Codex 风控检测插件。</p>
       <form className="login-form" onSubmit={async (event) => {
         event.preventDefault()
         if (connecting || submitting) return

@@ -8,7 +8,7 @@ import { Dot, HoverCard } from './ui'
 
 const OUTCOME_LABEL = {
   normal: '正常',
-  downshift: '降档',
+  downshift: '风控',
   uncertain: '不确定',
   cancelled: '未完成',
   blocked: '未完成',
@@ -22,7 +22,7 @@ export function roundToneLabel(round: InspectionRound): string {
 const TONE_TITLE: Record<string, string> = {
   normal: '本轮正常',
   uncertain: '本轮不确定 · 检出问题',
-  downshift: '本轮降档 · 检出问题',
+  downshift: '本轮风控 · 检出问题',
   empty: '本轮未完成',
 }
 
@@ -116,7 +116,7 @@ export function StatusLights({
               <div className="tip-row">
                 <span className="tip-k">说明</span>
                 <span className="tip-v">
-                  该凭证还没有执行过检测。点「测试」执行一轮，结果会按时间顺序显示在这里。
+                  该凭证还没有执行过检测。勾选后点击「巡检选中」或「巡检全部」，结果会按时间顺序显示在这里。
                 </span>
               </div>
             </>

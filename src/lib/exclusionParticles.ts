@@ -304,8 +304,46 @@ async function performExclusionTransfer(source: HTMLElement, target: HTMLElement
   const context = canvas.getContext('2d')
   if (!context) { release(); await fadeOnly(source, signal); return }
   const previous = { opacity: source.style.opacity, pointerEvents: source.style.pointerEvents, willChange: source.style.willChange }
-  const duration = clamp(Number.isFinite(options.durationMs) ? options.durationMs! : 900, 550, 1200)
+  const duration = clamp(Number.isFinite(options.durationMs) ? options.durationMs! : 980, 650, 1280)
   const glow = view.getComputedStyle(target).getPropertyValue('--accent').trim() || view.getComputedStyle(target).color
+  const isDark = document.documentElement.dataset.pluginTheme === 'dark'
+  const palette = isDark
+    ? ['#60a5fa', '#38bdf8', '#a78bfa', '#fbbf24', '#34d399']
+    : ['#2563eb', '#0ea5e9', '#7c3aed', '#f59e0b', '#10b981']
+  const sparkCount = clamp(Math.floor(particles.length * 0.34), 24, 68)
+  const sparks = Array.from({ length: sparkCount }, (_, index) => {
+    const sample = particles[Math.floor((index * particles.length) / sparkCount) % particles.length]
+    return {
+      start: {
+        x: sample.start.x + (fraction(index, 11) - 0.5) * 14,
+        y: sample.start.y + (fraction(index, 12) - 0.5) * 14,
+      },
+      control1: {
+        x: sample.control1.x + (fraction(index, 13) - 0.5) * 56,
+        y: sample.control1.y - 24 - fraction(index, 14) * 64,
+      },
+      control2: {
+        x: sample.control2.x + (fraction(index, 15) - 0.5) * 36,
+        y: sample.control2.y - 12 - fraction(index, 16) * 44,
+      },
+      end: sample.end,
+      delay: clamp(sample.delay + fraction(index, 17) * 0.08, 0, 0.38),
+      phase: fraction(index, 18) * Math.PI * 2,
+      swirl: 8 + fraction(index, 19) * 16,
+      radius: 1.8 + fraction(index, 20) * 2.2,
+      color: palette[index % palette.length],
+    }
+  })
+  const burstSparks = Array.from({ length: 14 }, (_, index) => ({
+    angle: (index / 14) * Math.PI * 2 + (fraction(index, 21) - 0.5) * 0.25,
+    speed: 22 + fraction(index, 22) * 24,
+    color: palette[index % palette.length],
+  }))
+  const wavePoint = (p: Pick<ExclusionParticle, 'start' | 'control1' | 'control2' | 'end'>, t: number, phase: number, swirl: number) => {
+    const pt = exclusionParticlePoint(p, t)
+    const offset = Math.sin(t * Math.PI * 2 + phase) * Math.sin(t * Math.PI) * swirl
+    return { x: pt.x - left, y: pt.y - top + offset }
+  }
   await new Promise<void>((resolve) => {
     let frame = 0, finished = false, pulsing = false
     let started: number | null = null
@@ -329,7 +367,7 @@ async function performExclusionTransfer(source: HTMLElement, target: HTMLElement
       resolve()
     }
     const visibility = () => { if (document.hidden) finish() }
-    const deadline = view.setTimeout(finish, duration + 350)
+    const deadline = view.setTimeout(finish, duration + 380)
     cleanups.set(source, { token, run: finish })
     signal?.addEventListener('abort', finish, { once: true })
     view.addEventListener('resize', finish, { once: true }); view.addEventListener('scroll', finish, { capture: true, once: true })
@@ -345,32 +383,128 @@ async function performExclusionTransfer(source: HTMLElement, target: HTMLElement
       const progress = clamp((time - started) / duration, 0, 1)
       context.setTransform(ratio, 0, 0, ratio, 0, 0)
       context.clearRect(0, 0, width, height)
-      const wipe = clamp(progress / 0.36, 0, 1) * rect.width
+      const wipeProgress = clamp(progress / 0.36, 0, 1)
+      const wipe = wipeProgress * rect.width
       if (wipe < rect.width) {
         context.globalAlpha = 1
         context.drawImage(snapshot!.canvas, wipe * snapshot!.ratio, 0, (rect.width - wipe) * snapshot!.ratio, rect.height * snapshot!.ratio, rect.left + wipe - left, rect.top - top, rect.width - wipe, rect.height)
+        if (wipeProgress > 0.02) {
+          const beamX = rect.left + wipe - left
+          const beamTop = rect.top - top
+          const beamGrad = context.createLinearGradient(0, beamTop, 0, beamTop + rect.height)
+          beamGrad.addColorStop(0, 'rgba(56, 189, 248, 0)')
+          beamGrad.addColorStop(0.18, '#38bdf8')
+          beamGrad.addColorStop(0.5, '#ffffff')
+          beamGrad.addColorStop(0.82, '#818cf8')
+          beamGrad.addColorStop(1, 'rgba(129, 140, 248, 0)')
+          context.save()
+          context.globalAlpha = 0.28 * (1 - wipeProgress * 0.35)
+          const haloGrad = context.createLinearGradient(beamX - 24, 0, beamX + 6, 0)
+          haloGrad.addColorStop(0, 'rgba(59, 130, 246, 0)')
+          haloGrad.addColorStop(1, glow)
+          context.fillStyle = haloGrad
+          context.fillRect(beamX - 24, beamTop, 30, rect.height)
+          context.globalAlpha = 0.92
+          context.fillStyle = beamGrad
+          context.fillRect(beamX - 1.2, beamTop, 2.4, rect.height)
+          context.restore()
+        }
       }
       for (let index = 0; index < particles.length; index++) {
         const particle = particles[index]
         const t = clamp((progress - particle.delay) / 0.66, 0, 1)
         if (progress < particle.delay || t >= 1) continue
-        const eased = 1 - (1 - t) ** 2
-        const point = exclusionParticlePoint(particle, eased)
-        const alpha = Math.min(1, t * 12 + 0.1) * (1 - t ** 2.8)
-        if (index % 4 === 0 && t > 0.12) {
-          const tail = exclusionParticlePoint(particle, Math.max(0, eased - 0.045))
-          context.globalAlpha = alpha * 0.23; context.strokeStyle = glow; context.lineWidth = 1
-          context.beginPath(); context.moveTo(tail.x - left, tail.y - top); context.lineTo(point.x - left, point.y - top); context.stroke()
+        const eased = 1 - (1 - t) ** 2.1
+        const phase = particle.rotation * 3.1
+        const point = wavePoint(particle, eased, phase, 7)
+        const alpha = Math.min(1, t * 10 + 0.12) * (1 - t ** 2.6)
+        if (index % 3 === 0 && t > 0.1) {
+          const prev = wavePoint(particle, Math.max(0, eased - 0.075), phase, 7)
+          context.globalAlpha = alpha * 0.34
+          context.strokeStyle = palette[index % palette.length]
+          context.lineWidth = 1.5
+          context.beginPath()
+          context.moveTo(prev.x, prev.y)
+          context.lineTo(point.x, point.y)
+          context.stroke()
         }
-        const size = particle.size * (1 - t * 0.65)
-        context.save(); context.translate(point.x - left, point.y - top); context.rotate(particle.rotation * t)
+        const size = particle.size * (1 - t * 0.58)
+        context.save()
+        context.translate(point.x, point.y)
+        context.rotate(particle.rotation * t * 1.4)
         context.globalAlpha = alpha
-        context.shadowColor = glow; context.shadowBlur = t > 0.65 ? 7 : 0
         context.drawImage(snapshot!.canvas, particle.sourceX * snapshot!.ratio, particle.sourceY * snapshot!.ratio, particle.sourceWidth * snapshot!.ratio, particle.sourceHeight * snapshot!.ratio, -size / 2, -size / 2, size, size)
         context.restore()
       }
+      context.save()
+      if (isDark) context.globalCompositeOperation = 'lighter'
+      for (let index = 0; index < sparks.length; index++) {
+        const spark = sparks[index]
+        const t = clamp((progress - spark.delay) / 0.62, 0, 1)
+        if (progress < spark.delay || t >= 1) continue
+        const eased = 1 - (1 - t) ** 2.2
+        const head = wavePoint(spark, eased, spark.phase, spark.swirl)
+        const tailSteps = 4
+        for (let step = tailSteps; step >= 1; step--) {
+          const t0 = Math.max(0, eased - step * 0.032)
+          const t1 = Math.max(0, eased - (step - 1) * 0.032)
+          const p0 = wavePoint(spark, t0, spark.phase, spark.swirl)
+          const p1 = wavePoint(spark, t1, spark.phase, spark.swirl)
+          const fade = (1 - step / (tailSteps + 1)) * (1 - t ** 2.4)
+          context.globalAlpha = fade * (isDark ? 0.65 : 0.45)
+          context.strokeStyle = spark.color
+          context.lineWidth = Math.max(0.8, spark.radius * (1.15 - step * 0.2))
+          context.lineCap = 'round'
+          context.beginPath()
+          context.moveTo(p0.x, p0.y)
+          context.lineTo(p1.x, p1.y)
+          context.stroke()
+        }
+        const coreAlpha = Math.sin(t * Math.PI)
+        context.globalAlpha = coreAlpha * 0.28
+        context.fillStyle = spark.color
+        context.beginPath()
+        context.arc(head.x, head.y, spark.radius * 2.4, 0, Math.PI * 2)
+        context.fill()
+        context.globalAlpha = coreAlpha * 0.95
+        context.fillStyle = '#ffffff'
+        context.beginPath()
+        context.arc(head.x, head.y, spark.radius * 0.85, 0, Math.PI * 2)
+        context.fill()
+      }
+      if (progress > 0.56) {
+        const burst = clamp((progress - 0.56) / 0.44, 0, 1)
+        const cx = end.x - left
+        const cy = end.y - top
+        const ringAlpha = (1 - burst) * 0.72
+        for (let ring = 0; ring < 2; ring++) {
+          const rt = clamp(burst - ring * 0.16, 0, 1)
+          if (rt <= 0) continue
+          context.globalAlpha = ringAlpha * (1 - rt)
+          context.strokeStyle = ring === 0 ? glow : '#38bdf8'
+          context.lineWidth = 2.2 - rt * 1.4
+          context.beginPath()
+          context.arc(cx, cy, 8 + rt * 38, 0, Math.PI * 2)
+          context.stroke()
+        }
+        const sparkBurst = 1 - (1 - burst) ** 2
+        for (let index = 0; index < burstSparks.length; index++) {
+          const item = burstSparks[index]
+          const r0 = 5 + sparkBurst * (item.speed * 0.62)
+          const r1 = 8 + sparkBurst * item.speed
+          context.globalAlpha = (1 - burst) * 0.85
+          context.strokeStyle = item.color
+          context.lineWidth = 1.6 * (1 - burst * 0.6)
+          context.lineCap = 'round'
+          context.beginPath()
+          context.moveTo(cx + Math.cos(item.angle) * r0, cy + Math.sin(item.angle) * r0)
+          context.lineTo(cx + Math.cos(item.angle) * r1, cy + Math.sin(item.angle) * r1)
+          context.stroke()
+        }
+      }
+      context.restore()
       context.globalAlpha = 1
-      if (!pulsing && progress > 0.62) { pulsing = true; targets.set(target, (targets.get(target) ?? 0) + 1); target.classList.add('exclusion-target-arrival') }
+      if (!pulsing && progress > 0.58) { pulsing = true; targets.set(target, (targets.get(target) ?? 0) + 1); target.classList.add('exclusion-target-arrival') }
       if (progress >= 1) finish()
       else frame = view.requestAnimationFrame(paint)
       } catch { finish() }

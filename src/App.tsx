@@ -1,18 +1,34 @@
-import { useEffect, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
+import pluginLogo from '../assets/logo.svg'
 import { useStore, type TabKey } from './store/store'
 import { Overview } from './views/Overview'
-import { Statistics } from './views/Statistics'
-import { HistoryView } from './views/History'
-import { SettingsView } from './views/Settings'
 import { RunPanel } from './components/RunPanel'
-import { EvidenceSheet } from './components/EvidenceSheet'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { ExclusionDrawer, ExclusionIcon } from './components/ExclusionDrawer'
 import { Toasts } from './components/Toasts'
 import { SettingsSavePrompt } from './components/SettingsSavePrompt'
 import { InspectionConfirmationDialog } from './components/InspectionConfirmationDialog'
-import { Icon, SelectionProvider, useSelectionSet } from './components/ui'
+import { WeightZeroWarningDialog } from './components/WeightZeroWarningDialog'
+import { HoverCard, Icon, NameMaskToggle, SelectionProvider, useSelectionSet } from './components/ui'
 import { handleApplicationShortcut } from './lib/applicationShortcuts'
+import { changedSettings } from './lib/settingsDraft'
+import { isManuallyExcluded } from './lib/derive'
+
+const loadStatistics = () => import('./views/Statistics')
+const loadHistory = () => import('./views/History')
+const loadSettings = () => import('./views/Settings')
+const loadEvidenceSheet = () => import('./components/EvidenceSheet')
+
+const Statistics = lazy(() => loadStatistics().then((m) => ({ default: m.Statistics })))
+const HistoryView = lazy(() => loadHistory().then((m) => ({ default: m.HistoryView })))
+const SettingsView = lazy(() => loadSettings().then((m) => ({ default: m.SettingsView })))
+const EvidenceSheet = lazy(() => loadEvidenceSheet().then((m) => ({ default: m.EvidenceSheet })))
+
+const TAB_PRELOADERS: Partial<Record<TabKey, () => Promise<unknown>>> = {
+  statistics: loadStatistics,
+  history: loadHistory,
+  settings: loadSettings,
+}
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'overview', label: '概览' },
@@ -30,10 +46,15 @@ export default function App() {
   const tab = useStore((s) => s.tab)
   const setTab = useStore((s) => s.setTab)
   const settings = useStore((s) => s.settings)
+  const settingsDraft = useStore((s) => s.settingsDraft)
   const tasks = useStore((s) => s.tasks)
   const connection = useStore((s) => s.connection)
   const authenticated = useStore((s) => s.authenticated)
-  const excludedCount = useStore((s) => s.credentials.filter((credential) => credential.inspectionExcluded).length)
+  const excludedCount = useStore((s) =>
+    s.credentials.reduce((count, credential) => count + Number(isManuallyExcluded(credential)), 0),
+  )
+  const hasDetail = useStore((s) => Boolean(s.detail))
+  const settingsDirty = useMemo(() => changedSettings(settings, settingsDraft).length > 0, [settings, settingsDraft])
   const selected = useStore((s) => s.selected)
   const toggleSelect = useStore((s) => s.toggleSelect)
   const setSelected = useStore((s) => s.selectTargets)
@@ -42,7 +63,7 @@ export default function App() {
   const setRunPanel = useStore((s) => s.setRunPanel)
   const updateSettings = useStore((s) => s.updateSettings)
   useEffect(() => {
-    document.documentElement.dataset.downshiftTheme = settings.theme
+    document.documentElement.dataset.pluginTheme = settings.theme
   }, [settings.theme])
 
   // Blur is a document-level flag so names stay blurred in every view and overlay.
@@ -85,68 +106,98 @@ export default function App() {
           <div className="topbar-inner">
             <div className="brand">
               <span className="brand-mark" aria-hidden="true">
-                ◈
+                <img src={pluginLogo} alt="" className="brand-mark-img" />
               </span>
-              <div className="brand-text">
-                <h1>Codex 降档检测</h1>
-                <p>CLIProxyAPI 凭证巡检</p>
-              </div>
+              <h1 className="brand-title">Codex 风控检测</h1>
             </div>
 
             <nav className="nav" aria-label="主导航">
               {TABS.map((item) => (
-                <button
+                <HoverCard
                   key={item.key}
-                  type="button"
-                  className="nav-item"
-                  aria-current={tab === item.key ? 'page' : undefined}
-                  onClick={() => setTab(item.key)}
+                  compact
+                  placement="bottom"
+                  disabled={item.key !== 'settings' || !settingsDirty}
+                  content="有未保存的设置草稿"
                 >
-                  {item.label}
-                </button>
+                  <button
+                    type="button"
+                    className="nav-item"
+                    aria-current={tab === item.key ? 'page' : undefined}
+                    onPointerEnter={() => void TAB_PRELOADERS[item.key]?.()}
+                    onFocus={() => void TAB_PRELOADERS[item.key]?.()}
+                    onClick={() => setTab(item.key)}
+                  >
+                    {item.label}
+                    {item.key === 'settings' && settingsDirty && (
+                      <span className="nav-dirty-dot" aria-label="有未保存的设置" />
+                    )}
+                  </button>
+                </HoverCard>
               ))}
             </nav>
 
             <div className="topbar-actions">
-              <button type="button" className={`btn btn-sm exclusion-entry exclusion-topbar-entry ${excludedCount ? 'has-excluded' : ''}`} data-exclusion-target
-                onClick={() => useStore.getState().setExclusionDrawerOpen(true)} aria-label={`不参与巡检池，${excludedCount} 个凭证`}>
-                <ExclusionIcon /><span className="exclusion-topbar-label">不参与巡检</span><span className="count-badge">{excludedCount}</span>
-              </button>
+              {connection !== 'connected' && (
+                <span className="env-badge" role="status">
+                  <i aria-hidden="true" />
+                  未连接
+                </span>
+              )}
+
               <button
                 type="button"
                 className="btn btn-sm"
                 onClick={() => setRunPanel(true)}
+                aria-label={running ? `巡检中 ${finishedCount}/${running.items.length}` : '打开任务抽屉'}
               >
                 {running ? (
                   <>
                     <span
-                      className="dot"
-                      style={{ background: 'var(--accent)', animation: 'pulse 1.1s ease-in-out infinite' }}
+                      className="dot sonar-dot"
                       aria-hidden="true"
                     />
-                    巡检中 {finishedCount}/{running.items.length}
+                    <span>
+                      巡检中 {finishedCount}/{running.items.length}
+                    </span>
                   </>
                 ) : (
                   <>
                     <Icon.History />
-                    任务
-                    {tasks.length > 0 && <span className="count-badge" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{tasks.length}</span>}
+                    <span className="topbar-btn-label">任务</span>
+                    {tasks.length > 0 && <span className="count-badge">{tasks.length}</span>}
                   </>
                 )}
               </button>
 
-              {connection !== 'connected' && <span className="env-badge"><i aria-hidden="true" />未连接</span>}
-
               <button
                 type="button"
-                className="icon-btn"
-                onClick={() =>
-                  updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })
-                }
-                aria-label={settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+                className={`btn btn-sm exclusion-entry exclusion-topbar-entry ${excludedCount ? 'has-excluded' : ''}`}
+                data-exclusion-target
+                onClick={() => useStore.getState().setExclusionDrawerOpen(true)}
+                aria-label={`不参与巡检池，${excludedCount} 个凭证`}
               >
-                {settings.theme === 'dark' ? <Icon.Sun /> : <Icon.Moon />}
+                <ExclusionIcon />
+                <span className="exclusion-topbar-label">排除池</span>
+                <span className="count-badge">{excludedCount}</span>
               </button>
+
+              <NameMaskToggle />
+
+              <HoverCard
+                compact
+                placement="bottom"
+                content={settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+              >
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })}
+                  aria-label={settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+                >
+                  {settings.theme === 'dark' ? <Icon.Sun /> : <Icon.Moon />}
+                </button>
+              </HoverCard>
             </div>
           </div>
         </header>
@@ -154,15 +205,24 @@ export default function App() {
         <main className="page">
           <ConnectionPanel />
           {tab === 'overview' && <Overview onOpenDetail={openDetail} />}
-          {tab === 'statistics' && <Statistics />}
-          {tab === 'history' && <HistoryView onOpenDetail={openDetail} />}
-          {tab === 'settings' && <SettingsView />}
+          {tab !== 'overview' && (
+            <Suspense fallback={<div className="empty" style={{ padding: '48px 16px' }}>正在加载视图…</div>}>
+              {tab === 'statistics' && <Statistics />}
+              {tab === 'history' && <HistoryView onOpenDetail={openDetail} />}
+              {tab === 'settings' && <SettingsView />}
+            </Suspense>
+          )}
         </main>
 
         <RunPanel />
         <InspectionConfirmationDialog />
+        <WeightZeroWarningDialog />
         <ExclusionDrawer />
-        <EvidenceSheet />
+        {hasDetail && (
+          <Suspense fallback={null}>
+            <EvidenceSheet />
+          </Suspense>
+        )}
         <Toasts />
         {tab === 'settings' && <SettingsSavePrompt />}
       </div>

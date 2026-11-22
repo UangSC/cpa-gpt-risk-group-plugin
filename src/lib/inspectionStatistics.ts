@@ -128,9 +128,3 @@ export function summarizeInspections(targets: readonly Target[], model: string, 
   for (const [id, account] of byAccount) accounts.set(id, { ...finishMetrics(account.metrics), days: account.days })
   return { days, accounts, totals: finishMetrics(totals) }
 }
-
-export function summarizeWeek(targets: readonly Target[], model: string, now: number) {
-  const { days, accounts, totals } = summarizeInspections(targets, model, now)
-  const { candy, matched, samples, accepted } = totals
-  return { days: days.map((day) => ({ ...day, date: day.date.slice(5) })), accounts: accounts.size, candy, matched, samples, accepted }
-}

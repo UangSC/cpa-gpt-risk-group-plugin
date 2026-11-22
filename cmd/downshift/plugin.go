@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/classifier"
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/classifier"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
-const pluginID = "cpa-codex-downshift-classifier"
+const pluginID = "cpa-gpt-risk-group-plugin"
 const version = "0.1.5"
 const apiPrefix = "/v0/management/plugins/" + pluginID
 const resourcePrefix = "/v0/resource/plugins/" + pluginID
@@ -52,7 +52,7 @@ func (p *plugin) call(method string, raw []byte) (any, error) {
 		if err := p.configure(req.Config); err != nil {
 			return nil, err
 		}
-		return map[string]any{"schema_version": 6, "metadata": map[string]any{"Name": "Codex 降档检测与分类", "Version": version, "Author": "UangSC", "GitHubRepository": "https://github.com/UangSC/cpa-codex-downshift-classifier", "ConfigFields": []any{
+		return map[string]any{"schema_version": 6, "metadata": map[string]any{"Name": "Codex 风控检测与分类", "Version": version, "Author": "UangSC", "GitHubRepository": "https://github.com/UangSC/cpa-gpt-risk-group-plugin", "Logo": "https://raw.githubusercontent.com/UangSC/cpa-gpt-risk-group-plugin/main/assets/logo.svg", "ConfigFields": []any{
 			map[string]any{"Name": "api_base", "Type": "string", "Default": "http://127.0.0.1:8317", "Description": "本机 CPA 官方管理接口地址（仅允许回环 IP）"},
 			map[string]any{"Name": "management_key", "Type": "string", "Default": "", "Description": "CPA 管理密钥，仅在插件服务端使用；请勿提交到共享仓库"},
 			map[string]any{"Name": "state_dir", "Type": "string", "Default": "", "Description": "插件独立状态目录，留空使用 CPA 旁的 plugin-data 目录"},
@@ -69,6 +69,13 @@ func (p *plugin) call(method string, raw []byte) (any, error) {
 	}
 }
 
+func envWithFallback(primary, fallback string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	return os.Getenv(fallback)
+}
+
 func (p *plugin) configure(raw []byte) error {
 	config, err := scalarConfig(raw)
 	if err != nil {
@@ -79,11 +86,11 @@ func (p *plugin) configure(raw []byte) error {
 		options.APIBase = "http://127.0.0.1:8317"
 	}
 	if options.ManagementKey == "" {
-		options.ManagementKey = os.Getenv("CPA_DOWNSHIFT_MANAGEMENT_KEY")
+		options.ManagementKey = envWithFallback("CPA_RISK_GROUP_MANAGEMENT_KEY", "CPA_DOWNSHIFT_MANAGEMENT_KEY")
 	}
 	stateDir := config["state_dir"]
 	if stateDir == "" {
-		stateDir = os.Getenv("CPA_DOWNSHIFT_STATE_DIR")
+		stateDir = envWithFallback("CPA_RISK_GROUP_STATE_DIR", "CPA_DOWNSHIFT_STATE_DIR")
 	}
 	if stateDir == "" {
 		executable, err := os.Executable()

@@ -89,6 +89,19 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				err = s.SetExclusions(r.Context(), q.CredentialIDs, *q.Excluded)
 			}
 		}
+	case path == "/status" && r.Method == "PUT":
+		var q struct {
+			CredentialID string `json:"credentialId"`
+			Disabled     *bool  `json:"disabled"`
+		}
+		err = decode(w, r, &q)
+		if err == nil {
+			if q.Disabled == nil {
+				err = bad("必须指定凭证开启或关闭状态")
+			} else {
+				err = s.SetCredentialStatus(r.Context(), q.CredentialID, *q.Disabled)
+			}
+		}
 	case path == "/sync" && r.Method == "POST":
 		var q struct {
 			CredentialID string `json:"credentialId"`

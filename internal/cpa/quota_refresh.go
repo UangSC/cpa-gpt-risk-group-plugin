@@ -79,7 +79,7 @@ func (c *Client) RefreshQuota(ctx context.Context, id string, headerOverrides ma
 	if accountID == "" || len(accountID) > 256 || strings.IndexFunc(accountID, func(value rune) bool { return value <= ' ' || value >= 127 }) >= 0 {
 		return Quota{}, errors.New("CPA 未提供有效的账户标识，无法确认该凭证额度")
 	}
-	headers := codexRequestHeaders("application/json", overrides)
+	headers := c.quotaRequestHeaders(ctx, "application/json", overrides)
 	headers["Authorization"] = "Bearer $TOKEN$"
 	headers["Chatgpt-Account-Id"] = accountID
 	var reply struct {

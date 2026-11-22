@@ -1,19 +1,21 @@
+/* Plan Badges — Tiered 5-level metallic sweep & prestige aura (Free < Plus < 100 < 200 < 500) */
+
 .gpt-badge,
 .gpt-badge-fallback {
-  --gpt-badge-width: 80px;
-  --gpt-badge-height: 22px;
+  --gpt-badge-width: 82px;
+  --gpt-badge-height: 23px;
 }
 
 .gpt-badge.is-sm,
 .gpt-badge-fallback.is-sm {
-  --gpt-badge-width: 72px;
-  --gpt-badge-height: 20px;
+  --gpt-badge-width: 74px;
+  --gpt-badge-height: 21px;
 }
 
 .gpt-badge {
-  --gpt-badge-cycle: 4s;
-  --gpt-badge-rest-shadow: 0 1px 2px rgb(10 13 20 / 20%);
-  --gpt-badge-peak-shadow: 0 2px 4px rgb(10 13 20 / 28%);
+  --gpt-badge-cycle: 6.4s;
+  --gpt-badge-rest-shadow: 0 1px 2px rgba(10, 13, 20, 0.14);
+  --gpt-badge-peak-shadow: 0 1px 2px rgba(10, 13, 20, 0.14);
   position: relative;
   isolation: isolate;
   display: inline-grid;
@@ -25,9 +27,10 @@
   padding: 0;
   border: 0;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: 5.5px;
   vertical-align: middle;
   box-shadow: var(--gpt-badge-rest-shadow);
+  transition: transform 0.2s cubic-bezier(0.22, 1.25, 0.36, 1), box-shadow 0.2s ease;
   animation: gpt-badge-depth var(--gpt-badge-cycle) ease-in-out infinite;
 }
 
@@ -39,7 +42,7 @@
 
 .gpt-badge::before,
 .gpt-badge::after {
-  content: "";
+  content: '';
   position: absolute;
   pointer-events: none;
 }
@@ -48,39 +51,163 @@
   z-index: 1;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgb(255 255 255 / 14%), transparent 37%, transparent 65%, rgb(13 9 7 / 8%));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), inset 0 -1px 1px rgb(13 9 7 / 13%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 1px rgba(10, 8, 6, 0.12);
 }
 
 .gpt-badge::after {
   z-index: 2;
   inset: 0 auto 0 0;
   inline-size: 72%;
-  background:
-    linear-gradient(116deg, transparent 10%, rgb(255 255 255 / 6%) 30%, rgb(255 255 255 / 14%) 44%,
-      rgb(255 255 255 / 42%) 49%, rgb(255 255 255 / 16%) 52%, rgb(255 255 255 / 5%) 61%, transparent 72%),
-    linear-gradient(116deg, transparent 70%, rgb(255 250 222 / 14%) 77%, transparent 84%);
-  mask-image: linear-gradient(#000, #0006 48%, #0008 66%, #000);
-  transform: translateX(-110%);
-  animation: gpt-badge-shine var(--gpt-badge-cycle) cubic-bezier(.28, .02, .32, 1) infinite;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.08) 38%,
+    rgba(255, 255, 255, 0.28) 49%,
+    rgba(255, 255, 255, 0.08) 60%,
+    transparent 76%
+  );
+  transform: translateX(-125%);
+  animation: gpt-badge-shine var(--gpt-badge-cycle) cubic-bezier(0.26, 0.04, 0.3, 1) infinite;
+}
+
+.selectable-card:hover .gpt-badge,
+.cred-row:hover .gpt-badge,
+.gpt-badge:hover {
+  transform: translateY(-1px) scale(1.03);
+}
+
+.selectable-card:hover .gpt-badge::after,
+.cred-row:hover .gpt-badge::after,
+.gpt-badge:hover::after {
+  animation-duration: 1.8s;
+}
+
+/* Tier Free: quiet frosted silver glaze, no aura pulse */
+.gpt-badge[data-plan='free'] {
+  --gpt-badge-cycle: 7.4s;
+  --gpt-badge-rest-shadow: 0 1px 2px rgba(44, 59, 80, 0.12);
+  --gpt-badge-peak-shadow: 0 1px 2px rgba(44, 59, 80, 0.12);
+  animation: none;
+}
+
+.gpt-badge[data-plan='free']::after {
+  inline-size: 62%;
+  background: linear-gradient(
+    115deg,
+    transparent 26%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 74%
+  );
+}
+
+/* Tier Plus: calm lime enamel sheen */
+.gpt-badge[data-plan='plus'] {
+  --gpt-badge-cycle: 6.0s;
+  --gpt-badge-rest-shadow: 0 1px 2px rgba(52, 86, 14, 0.16);
+  --gpt-badge-peak-shadow: 0 2px 4px rgba(122, 172, 44, 0.24);
+}
+
+.gpt-badge[data-plan='plus']::after {
+  background: linear-gradient(
+    115deg,
+    transparent 22%,
+    rgba(255, 255, 235, 0.1) 38%,
+    rgba(255, 255, 235, 0.34) 49%,
+    rgba(255, 255, 235, 0.1) 60%,
+    transparent 76%
+  );
+}
+
+/* Tier 100: emerald satin sheen */
+.gpt-badge[data-tier='100'] {
+  --gpt-badge-cycle: 5.0s;
+  --gpt-badge-rest-shadow: 0 1px 2px rgba(8, 62, 40, 0.18);
+  --gpt-badge-peak-shadow: 0 2px 6px rgba(16, 169, 109, 0.28);
+}
+
+.gpt-badge[data-tier='100']::after {
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(230, 255, 244, 0.12) 38%,
+    rgba(230, 255, 244, 0.44) 49%,
+    rgba(230, 255, 244, 0.14) 58%,
+    transparent 74%
+  );
+}
+
+/* Tier 200: sunlit gold sheen */
+.gpt-badge[data-tier='200'] {
+  --gpt-badge-cycle: 4.3s;
+  --gpt-badge-rest-shadow: 0 1px 3px rgba(96, 62, 6, 0.22);
+  --gpt-badge-peak-shadow: 0 2px 7px rgba(197, 139, 22, 0.34);
+}
+
+.gpt-badge[data-tier='200']::after {
+  background: linear-gradient(
+    115deg,
+    transparent 18%,
+    rgba(255, 248, 208, 0.16) 38%,
+    rgba(255, 248, 208, 0.52) 49%,
+    rgba(255, 248, 208, 0.18) 58%,
+    transparent 74%
+  );
+}
+
+/* Tier 500 Pro: Obsidian & 24K Gold flagship metallic aura */
+.gpt-badge[data-plan='500pro'] {
+  --gpt-badge-cycle: 3.1s;
+  --gpt-badge-rest-shadow: 0 1px 4px rgba(12, 8, 4, 0.38), 0 0 0 1px rgba(255, 214, 102, 0.22);
+  --gpt-badge-peak-shadow: 0 2px 10px rgba(12, 8, 4, 0.46), 0 0 12px rgba(255, 206, 86, 0.5);
+}
+
+.gpt-badge[data-plan='500pro']::after {
+  inline-size: 78%;
+  background: linear-gradient(
+    115deg,
+    transparent 18%,
+    rgba(255, 214, 102, 0.26) 40%,
+    rgba(255, 251, 224, 0.78) 48%,
+    rgba(255, 214, 102, 0.3) 54%,
+    transparent 68%,
+    rgba(255, 240, 175, 0.26) 76%,
+    transparent 84%
+  );
+  mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.72) 52%, #000);
+}
+
+/* Tier 500 Team: Royal Sapphire & Platinum-Gold flagship metallic aura */
+.gpt-badge[data-plan='500team'] {
+  --gpt-badge-cycle: 3.1s;
+  --gpt-badge-rest-shadow: 0 1px 4px rgba(6, 12, 24, 0.38), 0 0 0 1px rgba(186, 214, 255, 0.24);
+  --gpt-badge-peak-shadow: 0 2px 10px rgba(6, 12, 24, 0.46), 0 0 12px rgba(114, 174, 255, 0.48);
+}
+
+.gpt-badge[data-plan='500team']::after {
+  inline-size: 78%;
+  background: linear-gradient(
+    115deg,
+    transparent 18%,
+    rgba(147, 197, 253, 0.28) 40%,
+    rgba(255, 250, 232, 0.78) 48%,
+    rgba(235, 208, 148, 0.32) 54%,
+    transparent 68%,
+    rgba(191, 219, 254, 0.28) 76%,
+    transparent 84%
+  );
+  mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.72) 52%, #000);
 }
 
 @keyframes gpt-badge-shine {
-  0%, 9% { transform: translateX(-110%); }
-  35%, 100% { transform: translateX(155%); }
+  0%, 10% { transform: translateX(-125%); }
+  38%, 100% { transform: translateX(165%); }
 }
 
 @keyframes gpt-badge-depth {
-  0%, 8%, 42%, 100% { box-shadow: var(--gpt-badge-rest-shadow); }
-  22% { box-shadow: var(--gpt-badge-peak-shadow); }
+  0%, 8%, 45%, 100% { box-shadow: var(--gpt-badge-rest-shadow); }
+  24% { box-shadow: var(--gpt-badge-peak-shadow); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gpt-badge,
-  .gpt-badge::after { animation: none; }
-}
-
-/* 无对应 SVG 的套餐显示名称，不绘制替代徽章。 */
 .gpt-badge-fallback {
   display: inline-flex;
   align-items: center;
@@ -88,8 +215,9 @@
   inline-size: var(--gpt-badge-width);
   block-size: var(--gpt-badge-height);
   flex: none;
-  background: transparent;
-  box-shadow: none;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 5.5px;
   color: var(--text-2);
   font: 600 10.5px var(--font);
   white-space: nowrap;
@@ -97,31 +225,19 @@
   text-overflow: ellipsis;
 }
 
-.gpt-badge-fallback.is-sm { font-size: 10px; }
-
-.pool-card-top .gpt-badge,
-.pool-card-top .gpt-badge-fallback { margin-left: auto; }
-
-.cred-ident .gpt-badge,
-.tile-head .gpt-badge { align-self: center; }
-
-/* 500 档保持紧凑边缘，用铭牌内的扫光体现材质。 */
-.gpt-badge[data-tier='500'] {
-  --badge-metal: #ffc566;
-  --badge-flare: #fff9e7;
-  --gpt-badge-rest-shadow: 0 1px 2px rgb(8 7 7 / 36%);
-  --gpt-badge-peak-shadow: 0 1px 3px rgb(8 7 7 / 42%), 0 0 4px color-mix(in srgb, var(--badge-metal) 24%, transparent);
+.gpt-badge-fallback.is-sm {
+  font-size: 10px;
 }
 
-.gpt-badge[data-plan='500team'] {
-  --badge-metal: #d9bd83;
-  --badge-flare: #f1f6ff;
-}
+@media (prefers-reduced-motion: reduce) {
+  .gpt-badge,
+  .gpt-badge::after {
+    animation: none;
+  }
 
-.gpt-badge[data-tier='500']::after {
-  background: linear-gradient(116deg,
-    transparent 28%, color-mix(in srgb, var(--badge-metal) 32%, transparent) 46%,
-    color-mix(in srgb, var(--badge-flare) 74%, transparent) 49%, transparent 56%,
-    color-mix(in srgb, var(--badge-metal) 28%, transparent) 67%, transparent 72%);
-  mask-image: linear-gradient(#000, #0008 55%, #000);
+  .selectable-card:hover .gpt-badge,
+  .cred-row:hover .gpt-badge,
+  .gpt-badge:hover {
+    transform: none;
+  }
 }

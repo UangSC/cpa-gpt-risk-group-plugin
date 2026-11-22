@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
-func quotaReason(c cpa.Credential, v Settings) string {
+func quotaReason(c cpa.Credential, v Settings, scope string) string {
 	if c.Disabled || c.Auth == "expired" {
 		return "凭证被禁用或认证失效"
 	}
@@ -29,8 +29,15 @@ func quotaReason(c cpa.Credential, v Settings) string {
 	if c.Quota.Status == "exhausted" {
 		return "额度已耗尽"
 	}
-	if known && minimum <= v.Quota.MinRemainingPercent {
-		return fmt.Sprintf("剩余额度 %.1f%% 未高于 %.1f%% 门槛", minimum, v.Quota.MinRemainingPercent)
+	minRemaining := v.Quota.MinRemainingPercent
+	if scope == "scheduled" && v.Schedule.MinRemainingPercent != nil {
+		minRemaining = *v.Schedule.MinRemainingPercent
+	}
+	if known && minimum <= minRemaining {
+		if scope == "scheduled" {
+			return fmt.Sprintf("定时巡检额度门槛：剩余额度 %.1f%% 未高于 %.1f%% 门槛", minimum, minRemaining)
+		}
+		return fmt.Sprintf("剩余额度 %.1f%% 未高于 %.1f%% 门槛", minimum, minRemaining)
 	}
 	if !known && v.Quota.UnknownPolicy == "skip" {
 		return "额度未知，按设置跳过"
@@ -100,13 +107,42 @@ func (s *Service) inspect(ctx context.Context, cancel context.CancelFunc, task T
 			skip("凭证已从 CPA 移除")
 			return
 		}
-		if reason := quotaReason(c, v); reason != "" {
+		if reason := quotaReason(c, v, q.Scope); reason != "" {
 			skip(reason)
 			return
 		}
 		if !supportsModel(c, q.Model) {
 			skip("该凭证未注册所选检测模型")
 			return
+		}
+		if q.Scope == "scheduled" {
+			policy := v.Schedule.BusySessionPolicy
+			if policy == "" {
+				policy = "under-limit"
+			}
+			limit := v.Schedule.MaxBusySessions
+			if limit <= 0 {
+				limit = 3
+			}
+			busyCount := c.BusySessions
+			if c.Availability == "busy" && busyCount <= 0 {
+				busyCount = 1
+			}
+			switch policy {
+			case "always":
+				// 始终巡检：无论是否存在活跃会话都继续执行
+			case "skip-busy":
+				if c.Availability == "busy" || busyCount > 0 {
+					skip("定时巡检策略：凭证当前存在活跃会话，本次跳过")
+					return
+				}
+			default:
+				if busyCount >= limit {
+					skip(fmt.Sprintf("定时巡检策略：当前并发会话 %d 个（不低于阈值 %d），本次跳过", busyCount, limit))
+					return
+				}
+			}
+			break
 		}
 		if c.Availability != "busy" {
 			break
@@ -160,13 +196,20 @@ func (s *Service) commitRound(ctx context.Context, task Task, q StartRequest, c 
 	}
 	if round.Outcome == "normal" || round.Outcome == "downshift" {
 		if ctx.Err() == nil {
-			syncRecord, _ := s.apply(ctx, c.ID, str(round.Outcome), settings)
-			round.Sync = &syncRecord
+			if settings.Routing.Mode == "none" {
+				round.Sync = &Sync{Mode: "none", Status: "not-needed"}
+			} else {
+				syncRecord, _ := s.apply(ctx, c.ID, str(round.Outcome), settings)
+				round.Sync = &syncRecord
+			}
 		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.recordLocked(c.ID)
+	if round.Sync != nil && round.Sync.Mode == "none" {
+		round.Sync.AppliedGroup = r.Group
+	}
 	target := r.Targets[q.Model]
 	if target.ID == "" {
 		target = Target{ID: targetID(c.ID, q.Model), CredentialID: c.ID, Model: q.Model, Verdict: "untested"}

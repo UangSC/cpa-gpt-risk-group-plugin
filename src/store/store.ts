@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Credential, InspectionTask, Settings, Target, Toast, InspectionConfirmation } from '../types'
 import { backend, EMPTY_CAPABILITIES, type Capabilities, type Snapshot, type RequestHeaderProfile } from '../api'
 import { DEFAULT_SETTINGS } from '../data/defaults'
+import { isManuallyExcluded } from '../lib/derive'
 import { normalizeRouting } from '../lib/routing'
 import { changedSettings, mergeSettingsDraft, rebaseSettingsDraft, settingsErrors } from '../lib/settingsDraft'
 import { APIError } from '../api/plugin'
@@ -36,14 +37,17 @@ interface AppState {
   syncing: string[]
   quotaRefreshing: string[]
   starting: boolean
+  startingCredentialIds: string[]
   mutationVersion: number
   configChangesRevision: string
   exclusionDrawerOpen: boolean
   excluding: string[]
+  togglingStatus: string[]
   inspectionConfirmation: InspectionConfirmation | null
   inspectionConfirmError: string
   pendingSettingsConfirmation: Settings | null
   settingsConfirmError: string
+  pendingWeightZero: { credentialId: string; credentialName: string } | null
   requestHeaderProfile?: RequestHeaderProfile
   setTab: (tab: TabKey) => void
   hydrate: (snapshot: Snapshot) => void
@@ -65,13 +69,19 @@ interface AppState {
   setExclusionDrawerOpen: (open: boolean) => void
   closeInspectionConfirmation: () => void
   closeSettingsConfirmation: () => void
+  requestWeightZeroWarning: (target: { credentialId: string; credentialName: string }) => void
+  closeWeightZeroWarning: () => void
 }
 
-const PREFERENCES_KEY = 'cpa-downshift:preferences:v1'
+const PREFERENCES_KEY = 'cpa-gpt-risk-group:preferences:v1'
 type Preferences = Pick<Settings, 'theme' | 'layout' | 'maskNames'>
 function preferences(): Partial<Preferences> {
   try {
-    const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) ?? localStorage.getItem('cpa-downshift:settings:v2') ?? '{}') as Partial<Preferences>
+    const raw = localStorage.getItem(PREFERENCES_KEY)
+      ?? localStorage.getItem('cpa-downshift:preferences:v1')
+      ?? localStorage.getItem('cpa-downshift:settings:v2')
+      ?? '{}'
+    const saved = JSON.parse(raw) as Partial<Preferences>
     return {
       ...(saved.theme === 'dark' || saved.theme === 'light' ? { theme: saved.theme } : {}),
       ...(['pool', 'list', 'card'].includes(saved.layout ?? '') ? { layout: saved.layout } : {}),
@@ -85,9 +95,10 @@ export const useStore = create<AppState>((set, get) => ({
   settingsDraft: null, settingsSaving: false, pendingTab: null, tasks: [],
   capabilities: { ...EMPTY_CAPABILITIES }, connection: 'connecting', connectionError: '', authenticated: false, lastUpdatedAt: null,
   selected: [], filters: { search: '', verdict: 'all', sort: null }, toasts: [], tab: 'overview',
-  sourceDetail: '', detail: null, runPanelOpen: false, syncing: [], quotaRefreshing: [], starting: false, mutationVersion: 0,
-  configChangesRevision: '', exclusionDrawerOpen: false, excluding: [],
+  sourceDetail: '', detail: null, runPanelOpen: false, syncing: [], quotaRefreshing: [], starting: false, startingCredentialIds: [], mutationVersion: 0,
+  configChangesRevision: '', exclusionDrawerOpen: false, excluding: [], togglingStatus: [],
   inspectionConfirmation: null, inspectionConfirmError: '', pendingSettingsConfirmation: null, settingsConfirmError: '',
+  pendingWeightZero: null,
 
   setTab: (tab) => {
     const state = get()
@@ -103,13 +114,21 @@ export const useStore = create<AppState>((set, get) => ({
       headerOverrides: snapshot.settings.headerOverrides ?? {},
       pagination: { ...DEFAULT_SETTINGS.pagination, ...snapshot.settings.pagination },
       routing: normalizeRouting(snapshot.settings.routing),
-      schedule: { ...DEFAULT_SETTINGS.schedule, ...snapshot.settings.schedule, windows: snapshot.settings.schedule?.windows ?? [] },
+      schedule: {
+        ...DEFAULT_SETTINGS.schedule,
+        ...snapshot.settings.schedule,
+        busySessionPolicy: snapshot.settings.schedule?.busySessionPolicy ?? DEFAULT_SETTINGS.schedule.busySessionPolicy,
+        maxBusySessions: snapshot.settings.schedule?.maxBusySessions ?? DEFAULT_SETTINGS.schedule.maxBusySessions,
+        minRemainingPercent: snapshot.settings.schedule?.minRemainingPercent ?? snapshot.settings.quota?.minRemainingPercent ?? DEFAULT_SETTINGS.schedule.minRemainingPercent,
+        windows: snapshot.settings.schedule?.windows ?? [],
+      },
       ...preferences(),
     }
     const current = get()
     const pinned = new Set(current.excluding)
     const credentials = pinned.size ? snapshot.credentials.map((credential) => pinned.has(credential.id)
       ? current.credentials.find((previous) => previous.id === credential.id) ?? credential : credential) : snapshot.credentials
+    const credById = new Map(credentials.map((credential) => [credential.id, credential]))
     set({
       credentials, targets: snapshot.targets, tasks: snapshot.tasks ?? [],
       configChangesRevision: snapshot.configChangesRevision ?? '',
@@ -122,13 +141,30 @@ export const useStore = create<AppState>((set, get) => ({
         availabilityKnown: snapshot.capabilities?.availabilityKnown === true },
       connection: 'connected', connectionError: '', authenticated: true, sourceDetail: snapshot.sourceDetail ?? '',
       lastUpdatedAt: new Date().toISOString(),
-      selected: get().selected.filter((id) => snapshot.credentials.some((credential) => credential.id === id)),
+      selected: get().selected.filter((id) => {
+        const cred = credById.get(id)
+        return Boolean(cred && !cred.disabled && !isManuallyExcluded(cred))
+      }),
     })
     get().ensureTargetsForModel(settings.inspectionModel)
   },
   setFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
-  toggleSelect: (id) => set((state) => ({ selected: state.selected.includes(id) ? state.selected.filter((value) => value !== id) : [...state.selected, id] })),
-  selectTargets: (ids) => set({ selected: ids }), clearSelection: () => set({ selected: [] }),
+  toggleSelect: (id) =>
+    set((state) => {
+      const cred = state.credentials.find((credential) => credential.id === id)
+      if (!cred || cred.disabled || isManuallyExcluded(cred)) return state
+      return { selected: state.selected.includes(id) ? state.selected.filter((value) => value !== id) : [...state.selected, id] }
+    }),
+  selectTargets: (ids) =>
+    set((state) => {
+      const blocked = new Set(
+        state.credentials
+          .filter((credential) => credential.disabled || isManuallyExcluded(credential))
+          .map((credential) => credential.id),
+      )
+      return { selected: ids.filter((id) => !blocked.has(id)) }
+    }),
+  clearSelection: () => set({ selected: [] }),
   updateSettings: (patch) => {
     const state = get()
     const next = { ...state.settings,
@@ -184,7 +220,11 @@ export const useStore = create<AppState>((set, get) => ({
   cancelSettingsNavigation: () => set({ pendingTab: null }),
   ensureTargetsForModel: (model) => {
     const { credentials, targets } = get()
-    const missing = credentials.filter((credential) => !targets.some((target) => target.credentialId === credential.id && target.model === model))
+    const existing = new Set<string>()
+    for (const target of targets) {
+      if (target.model === model) existing.add(target.credentialId)
+    }
+    const missing = credentials.filter((credential) => !existing.has(credential.id))
     if (missing.length) set({ targets: [...targets, ...missing.map((credential) => ({
       id: `${credential.id}::${model}`, credentialId: credential.id, model, verdict: 'untested' as const, rounds: [], blocked: null,
     }))] })
@@ -197,6 +237,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (!get().settingsSaving) set({ pendingSettingsConfirmation: null, settingsConfirmError: '',
       ...(get().tab === 'overview' ? { settingsDraft: null } : {}) })
   },
+  requestWeightZeroWarning: (pendingWeightZero) => set({ pendingWeightZero }),
+  closeWeightZeroWarning: () => set({ pendingWeightZero: null }),
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
   notify: (toast) => {
     const id = `toast-${++toastSeq}`

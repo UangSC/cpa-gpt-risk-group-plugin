@@ -2,12 +2,13 @@
   "schema_version": 1,
   "plugins": [
     {
-      "id": "cpa-codex-downshift-classifier",
-      "name": "Codex 降档检测与分类",
-      "description": "巡检 Codex 凭证的回答质量，展示证据、近期统计和额度，按检测结果管理分组与优先级。",
+      "id": "cpa-gpt-risk-group-plugin",
+      "name": "Codex 风控检测与分类",
+      "description": "巡检 Codex 凭证的回答质量与风控状态，展示证据、近期统计和额度，默认仅检测，可按需管理模型前缀或调度优先级。",
       "author": "UangSC",
-      "repository": "https://github.com/UangSC/cpa-codex-downshift-classifier",
-      "tags": ["codex", "monitoring"]
+      "repository": "https://github.com/UangSC/cpa-gpt-risk-group-plugin",
+      "logo": "https://raw.githubusercontent.com/UangSC/cpa-gpt-risk-group-plugin/main/assets/logo.svg",
+      "tags": ["codex", "gpt", "monitoring"]
     }
   ]
 }

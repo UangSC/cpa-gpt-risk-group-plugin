@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/UangSC/cpa-codex-downshift-classifier/internal/cpa"
+	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
 // loadState 在调度器启动前读取历史状态，迁移失败时保留磁盘上的原文件。
@@ -57,6 +57,10 @@ func (s *Service) loadState() error {
 			persisted.Settings.Pagination.Pool = defaults.Pagination.Pool
 		}
 	}
+	if persisted.Settings.Routing.Mode == "" {
+		persisted.Settings.Routing.Mode = "none"
+	}
+	normalizeScheduleDefaults(&persisted.Settings.Schedule, persisted.Settings.Quota.MinRemainingPercent)
 	if err := validateSettings(persisted.Settings); err != nil {
 		return fmt.Errorf("持久化设置无效：%w", err)
 	}
@@ -111,7 +115,7 @@ func (s *Service) loadState() error {
 		persisted.Version = 7
 	}
 	if upgradingErrorPolicy {
-		// 频繁429现在参与降档；旧计划未授权新的请求重试与写入规则。
+		// 频繁429现在参与风控；旧计划未授权新的请求重试与写入规则。
 		if persisted.Settings.Schedule.Enabled {
 			persisted.Settings.Schedule.Enabled = false
 			persisted.Settings.Schedule.NextRunAt = nil

@@ -1,6 +1,6 @@
 import type { Credential, InspectionTask, Settings, Target, TestKind } from '../types'
 
-export const PLUGIN_ID = 'cpa-codex-downshift-classifier'
+export const PLUGIN_ID = 'cpa-gpt-risk-group-plugin'
 const ROOT = `/v0/management/plugins/${PLUGIN_ID}`
 export const ENDPOINTS = {
   snapshot: `${ROOT}/snapshot`, checks: `${ROOT}/checks`,
@@ -9,6 +9,7 @@ export const ENDPOINTS = {
   clearHistory: `${ROOT}/history/clear`,
   sync: `${ROOT}/sync`, settings: `${ROOT}/settings`, routing: `${ROOT}/routing`,
   exclusions: `${ROOT}/exclusions`,
+  status: `${ROOT}/status`,
   quotaRefresh: `${ROOT}/quota/refresh`,
 } as const
 
@@ -17,6 +18,7 @@ export interface Capabilities {
   weightEditingEnabled: boolean
   fingerprintAvailable: boolean
   availabilityKnown?: boolean
+  quotaRefreshAvailable?: boolean
 }
 export const EMPTY_CAPABILITIES: Capabilities = {
   routingStrategy: 'unknown', weightEditingEnabled: false, fingerprintAvailable: false, availabilityKnown: false,
@@ -33,7 +35,8 @@ export interface Snapshot {
   requestHeaderProfile?: RequestHeaderProfile
 }
 export interface RequestHeaderProfile {
-  codexCliVersion: string
+  source?: 'cpa-core' | 'cpa-config'
+  codexCliVersion?: string
   defaultHeaders: Record<string, string>
   managedHeaders?: string[]
 }
@@ -51,6 +54,7 @@ export interface StartChecksResponse { taskId: string }
 export interface RoutingRequest { credentialId: string; priority?: number; weight?: number; reset?: boolean }
 export interface SyncRequest { credentialId: string }
 export interface ExclusionRequest { credentialIds: string[]; excluded: boolean }
+export interface CredentialStatusRequest { credentialId: string; disabled: boolean }
 export interface QuotaRefreshRequest { credentialIds: string[] }
 export interface QuotaRefreshResponse { refreshedIds: string[]; failed: { credentialId: string; error: string }[] }
 export interface SyncResponse { status: 'synced' | 'failed'; appliedGroup: 'normal' | 'downshift' | null; message: string | null }
@@ -65,6 +69,7 @@ export interface Backend {
   saveSettings(settings: Settings, acknowledgeScheduledConfigChanges?: boolean): Promise<void>
   saveRouting(request: RoutingRequest): Promise<void>
   setExclusions(request: ExclusionRequest): Promise<void>
+  setCredentialStatus(request: CredentialStatusRequest): Promise<void>
   refreshQuota(request: QuotaRefreshRequest): Promise<QuotaRefreshResponse>
 }
 

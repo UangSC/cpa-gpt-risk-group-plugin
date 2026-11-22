@@ -153,4 +153,69 @@ export const Icon = {
       <path d="M12.8 2.9v3.7H9.1M3.2 13.1V9.4h3.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  Columns2: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <rect x="2.2" y="2.6" width="4.8" height="10.8" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="9" y="2.6" width="4.8" height="10.8" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  ),
+  List: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="2.8" cy="4" r="0.8" fill="currentColor" />
+      <circle cx="2.8" cy="8" r="0.8" fill="currentColor" />
+      <circle cx="2.8" cy="12" r="0.8" fill="currentColor" />
+    </svg>
+  ),
+  Grid: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <rect x="2.3" y="2.3" width="4.7" height="4.7" rx="1.1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="9" y="2.3" width="4.7" height="4.7" rx="1.1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="2.3" y="9" width="4.7" height="4.7" rx="1.1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="9" y="9" width="4.7" height="4.7" rx="1.1" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  ),
+  CheckAll: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path d="M2.2 8.2 4.8 10.8 10 4.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.8 10.8 8.3 12.2 13.8 5.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  Sliders: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path d="M2.5 5h11M2.5 11h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <circle cx="6" cy="5" r="1.6" fill="var(--surface, #fff)" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="10.5" cy="11" r="1.6" fill="var(--surface, #fff)" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  ),
+  Shield: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path
+        d="M8 2.2 13 4.1v3.7c0 3-2.1 5.3-5 6.1-2.9-.8-5-3.1-5-6.1V4.1L8 2.2Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="m6 8.1 1.4 1.4 2.8-2.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  Cpu: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.3" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="6.5" y="6.5" width="3" height="3" rx="0.5" fill="currentColor" />
+      <path
+        d="M6.2 2v2.2M9.8 2v2.2M6.2 11.8V14M9.8 11.8V14M2 6.2h2.2M2 9.8h2.2M11.8 6.2H14M11.8 9.8H14"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  Database: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <ellipse cx="8" cy="4.2" rx="4.8" ry="1.8" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.2 4.2v7.6c0 1 2.1 1.8 4.8 1.8s4.8-.8 4.8-1.8V4.2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.2 8c0 1 2.1 1.8 4.8 1.8s4.8-.8 4.8-1.8" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  ),
 }
