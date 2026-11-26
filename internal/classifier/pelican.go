@@ -9,36 +9,32 @@ import (
 )
 
 const (
-	pelicanPolicyID                  = "pelican-svg-manual-v1"
-	pelicanMaxSVGBytes               = 256 << 10
-	maxRetainedPelicanSVGsPerTarget  = 3
-	defaultPelicanMissingReason      = "未取得有效 SVG 绘画"
-	pelicanRawSnippetMaxBytes        = 4096
+	pelicanPolicyID                 = "pelican-html-svg-manual-v2"
+	pelicanPromptID                 = "pelican-bicycle-html-svg"
+	pelicanMaxHTMLBytes             = 8 << 20
+	maxRetainedPelicanSVGsPerTarget = 3
+	defaultPelicanMissingReason     = "未取得有效鹈鹕动画"
 )
 
-const PelicanQuestion = `[题目]
-请直接在回复中输出一段可嵌入 HTML 页面的内联 SVG 源码，绘制“鹈鹕骑自行车”的 2D 循环动画。
-
-[实现限制]
-仅依据本题描述作答。不调用工具，不联网，不引用历史对话或已保存的记忆，不创建或修改文件，不运行测试。所有图形和动画均写在同一个 <svg> 元素内。动画自动播放、无限循环，不依赖 JavaScript 或外部资源。
-
-[输出格式]
-整条回复只能包含一个 Markdown 代码块，严格遵守以下格式：
-1. 回复首行固定为 ` + "```svg" + `，末行固定为 ` + "```" + `，两行均顶格书写。
-2. 代码块内只放完整的 SVG 源码，以 <svg 开头，以 </svg> 结束。根元素必须包含 xmlns="http://www.w3.org/2000/svg" 和 viewBox 属性。
-3. 不输出 XML 声明、DOCTYPE、<html> 或 <body> 标签，不使用省略号或占位符。
-4. 代码块前后不添加空行、标题、文件名、说明或其他文字。`
+const PelicanQuestion = "不使用任何工具，也不要创建或修改文件，直接在回复中完成以下任务：\n\n创建一个 HTML，内容是 SVG 绘制一个鹈鹕骑自行车的 2D 动画，你不需要任何测试，不要使用外部资产。\n\n在一个 ```html 代码块中给出完整的 HTML 文件。"
 
 var (
-	pelicanFencePattern       = regexp.MustCompile("(?s)```[ \\t]*([A-Za-z0-9_-]*)[^\\n]*\\r?\\n(.*?)\\r?\\n[ \\t]*```")
-	pelicanSVGOpenPattern     = regexp.MustCompile(`(?is)<svg(?:\s|>)`)
-	pelicanSVGClosePattern    = regexp.MustCompile(`(?is)</svg\s*>`)
-	pelicanRootTagPattern     = regexp.MustCompile(`(?is)^<svg\b[^>]*>`)
-	pelicanXMLDeclPattern     = regexp.MustCompile(`(?is)<\?xml\b.*?\?>`)
-	pelicanDoctypePattern     = regexp.MustCompile(`(?is)<!(?:doctype|entity)\b[^>]*>`)
-	pelicanBlockDropPatterns  = []*regexp.Regexp{
+	pelicanFencePattern      = regexp.MustCompile("(?s)```[ \\t]*([A-Za-z0-9_-]*)[^\\n]*\\r?\\n(.*?)\\r?\\n[ \\t]*```")
+	pelicanSVGOpenPattern    = regexp.MustCompile(`(?is)<svg(?:\s|>)`)
+	pelicanSVGTagPattern     = regexp.MustCompile(`(?is)<svg\b[^>]*>`)
+	pelicanSVGClosePattern   = regexp.MustCompile(`(?is)</svg\s*>`)
+	pelicanRootTagPattern    = regexp.MustCompile(`(?is)^<svg\b[^>]*>`)
+	pelicanXMLDeclPattern    = regexp.MustCompile(`(?is)<\?xml\b.*?\?>`)
+	pelicanDoctypePattern    = regexp.MustCompile(`(?is)<!(?:doctype|entity)\b[^>]*>`)
+	pelicanExtScriptPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<script\b[^>]*\bsrc\s*=[^>]*>.*?</script\s*>`),
+		regexp.MustCompile(`(?is)<script\b[^>]*\bsrc\s*=[^>]*/?>`),
+	}
+	pelicanAllScriptPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`),
 		regexp.MustCompile(`(?is)<script\b[^>]*/>`),
+	}
+	pelicanSharedBlockDrops = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)<foreignObject\b[^>]*>.*?</foreignObject\s*>`),
 		regexp.MustCompile(`(?is)<foreignObject\b[^>]*/>`),
 		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
@@ -46,36 +42,40 @@ var (
 		regexp.MustCompile(`(?is)<object\b[^>]*>.*?</object\s*>`),
 		regexp.MustCompile(`(?is)<object\b[^>]*/>`),
 		regexp.MustCompile(`(?is)<embed\b[^>]*/?>`),
+		regexp.MustCompile(`(?is)<applet\b[^>]*>.*?</applet\s*>`),
+		regexp.MustCompile(`(?is)<applet\b[^>]*/>`),
+		regexp.MustCompile(`(?is)<base\b[^>]*/?>`),
+		regexp.MustCompile(`(?is)<meta\b[^>]*http-equiv\s*=\s*["']?\s*(?:refresh|content-security-policy)[^>]*/?>`),
 	}
-	pelicanEventAttrPattern   = regexp.MustCompile(`(?is)\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)`)
-	pelicanLinkAttrPattern    = regexp.MustCompile(`(?is)(\s+(?:xlink:href|href|src)\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
-	pelicanCSSImportPattern   = regexp.MustCompile(`(?is)@import\b[^;]+;?`)
-	pelicanCSSExternalURL     = regexp.MustCompile(`(?is)url\(\s*['"]?\s*(?:https?:|//|javascript:|vbscript:|data:text/)[^)]*\)`)
-	pelicanNumericWidthAttr   = regexp.MustCompile(`(?i)\bwidth\s*=\s*["']\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']`)
-	pelicanNumericHeightAttr  = regexp.MustCompile(`(?i)\bheight\s*=\s*["']\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']`)
+	pelicanEventAttrPattern  = regexp.MustCompile(`(?is)\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)`)
+	pelicanLinkAttrPattern   = regexp.MustCompile(`(?is)(\s+(?:xlink:href|href|src)\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
+	pelicanCSSImportPattern  = regexp.MustCompile(`(?is)@import\b[^;]+;?`)
+	pelicanCSSExternalURL    = regexp.MustCompile(`(?is)url\(\s*['"]?\s*(?:https?:|//|javascript:|vbscript:|data:text/)[^)]*\)`)
+	pelicanNumericWidthAttr  = regexp.MustCompile(`(?i)\bwidth\s*=\s*["']\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']`)
+	pelicanNumericHeightAttr = regexp.MustCompile(`(?i)\bheight\s*=\s*["']\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*["']`)
+	pelicanNamespaceAttr     = regexp.MustCompile(`(?i)\sxmlns\s*=`)
+	pelicanViewBoxAttr       = regexp.MustCompile(`(?i)\sviewbox\s*=`)
 )
 
-// ExtractPelicanSVG 从模型回复中提取并清洗内联 <svg> 源码，同时记录是否严格满足输出格式要求。
-func ExtractPelicanSVG(answer string) (svg string, strictFormat bool, formatNote string, err error) {
+// ExtractPelicanHTML 从模型回复中提取并清洗完整 HTML（含内联 <svg> 2D 动画），同时向后兼容纯 SVG 输出。
+func ExtractPelicanHTML(answer string) (htmlDoc string, svg string, strictFormat bool, formatNote string, err error) {
 	normalized := strings.ReplaceAll(strings.TrimPrefix(answer, "\ufeff"), "\r\n", "\n")
 	if strings.TrimSpace(normalized) == "" {
-		return "", false, "", errors.New("模型未返回任何文本内容")
+		return "", "", false, "", errors.New("模型未返回任何文本内容")
 	}
 
 	var deviations []string
 	blocks := pelicanFencePattern.FindAllStringSubmatch(normalized, -1)
 
-	strictFence := strings.HasPrefix(normalized, "```svg\n") &&
-		strings.HasSuffix(normalized, "\n```") &&
-		len(blocks) == 1 &&
-		blocks[0][0] == normalized
-	if !strictFence {
-		deviations = append(deviations, "未严格使用顶格单一 ```svg 代码块")
+	if len(blocks) != 1 || !strings.EqualFold(blocks[0][1], "html") {
+		deviations = append(deviations, "未严格使用单一 ```html 代码块")
+	} else if strings.TrimSpace(normalized) != strings.TrimSpace(blocks[0][0]) {
+		deviations = append(deviations, "代码块外含有附加文字")
 	}
 
 	candidate := ""
 	for _, block := range blocks {
-		if strings.EqualFold(block[1], "svg") && containsCompleteSVG(block[2]) {
+		if strings.EqualFold(block[1], "html") && containsCompleteSVG(block[2]) {
 			candidate = strings.TrimSpace(block[2])
 			break
 		}
@@ -92,41 +92,53 @@ func ExtractPelicanSVG(answer string) (svg string, strictFormat bool, formatNote
 		candidate = strings.TrimSpace(normalized)
 	}
 	if candidate == "" {
-		return "", false, "", errors.New("回复中未包含完整的 <svg>...</svg> 源码")
+		return "", "", false, "", errors.New("回复中未包含完整的 <svg>...</svg> 动画源码")
+	}
+	if len(candidate) > pelicanMaxHTMLBytes {
+		return "", "", false, "", fmt.Errorf("HTML/SVG 源码超过 %d MiB 响应限制", pelicanMaxHTMLBytes>>20)
 	}
 
 	lowerCandidate := strings.ToLower(candidate)
-	if strings.Contains(lowerCandidate, "<?xml") ||
-		strings.Contains(lowerCandidate, "<!doctype") ||
+	isFullHTML := strings.Contains(lowerCandidate, "<!doctype html") ||
 		strings.Contains(lowerCandidate, "<html") ||
-		strings.Contains(lowerCandidate, "<body") {
-		deviations = append(deviations, "包含 XML/DOCTYPE/HTML 外层标签")
-	}
+		strings.Contains(lowerCandidate, "<body")
 
-	rawSVG, ok := sliceOuterSVG(candidate)
-	if !ok {
-		return "", false, "", errors.New("回复中未包含完整的 <svg>...</svg> 源码")
+	if isFullHTML {
+		cleanHTML, cleanSVG, htmlDeviations, sanitizeErr := SanitizePelicanHTML(candidate)
+		if sanitizeErr != nil {
+			return "", "", false, "", sanitizeErr
+		}
+		htmlDoc = cleanHTML
+		svg = cleanSVG
+		deviations = append(deviations, htmlDeviations...)
+	} else {
+		deviations = append(deviations, "未输出完整 HTML 文件结构，已自动封装为独立 HTML")
+		rawSVG, ok := sliceOuterSVG(candidate)
+		if !ok {
+			return "", "", false, "", errors.New("回复中未包含完整的 <svg>...</svg> 动画源码")
+		}
+		cleanSVG, svgDeviations, sanitizeErr := SanitizePelicanSVG(rawSVG)
+		if sanitizeErr != nil {
+			return "", "", false, "", sanitizeErr
+		}
+		svg = cleanSVG
+		htmlDoc = wrapStandalonePelicanHTML(svg)
+		deviations = append(deviations, svgDeviations...)
 	}
-	if strings.TrimSpace(candidate) != rawSVG {
-		deviations = append(deviations, "代码块内含有 <svg> 之外的内容")
-	}
-	if len(rawSVG) > pelicanMaxSVGBytes {
-		return "", false, "", fmt.Errorf("SVG 源码超过 %d KB 限制", pelicanMaxSVGBytes>>10)
-	}
-
-	sanitized, rootDeviations, sanitizeErr := SanitizePelicanSVG(rawSVG)
-	if sanitizeErr != nil {
-		return "", false, "", sanitizeErr
-	}
-	deviations = append(deviations, rootDeviations...)
 
 	strictFormat = len(deviations) == 0
 	if strictFormat {
-		formatNote = "严格符合 ```svg 代码块、xmlns 与 viewBox 内联动画规范。"
+		formatNote = "严格符合 ```html 完整文件与内联 SVG 动画规范。"
 	} else {
-		formatNote = "已提取并安全清洗 SVG（格式偏差：" + strings.Join(uniqueStrings(deviations), "；") + "）。"
+		formatNote = "已提取并安全清洗 HTML/SVG（格式偏差：" + strings.Join(uniqueStrings(deviations), "；") + "）。"
 	}
-	return sanitized, strictFormat, formatNote, nil
+	return htmlDoc, svg, strictFormat, formatNote, nil
+}
+
+// ExtractPelicanSVG 保留兼容调用入口，返回提取清洗后的内联 <svg> 源码与格式说明。
+func ExtractPelicanSVG(answer string) (svg string, strictFormat bool, formatNote string, err error) {
+	_, svg, strictFormat, formatNote, err = ExtractPelicanHTML(answer)
+	return svg, strictFormat, formatNote, err
 }
 
 func containsCompleteSVG(text string) bool {
@@ -152,21 +164,33 @@ func sliceOuterSVG(text string) (string, bool) {
 	return strings.TrimSpace(sub[:lastClose[1]]), true
 }
 
-// SanitizePelicanSVG 移除脚本、事件属性、外部引用与危险嵌入节点，并补齐根元素渲染所需属性。
-func SanitizePelicanSVG(raw string) (string, []string, error) {
-	var deviations []string
-	cleaned := pelicanXMLDeclPattern.ReplaceAllString(raw, "")
-	cleaned = pelicanDoctypePattern.ReplaceAllString(cleaned, "")
+func wrapStandalonePelicanHTML(svg string) string {
+	return "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>鹈鹕骑自行车 SVG 2D 动画</title>\n<style>\nhtml, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f8fafc; }\nbody > svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; }\n</style>\n</head>\n<body>\n" + svg + "\n</body>\n</html>"
+}
 
-	for _, pattern := range pelicanBlockDropPatterns {
-		if pattern.MatchString(cleaned) {
-			deviations = append(deviations, "已剥离脚本或受限内嵌标签")
-			cleaned = pattern.ReplaceAllString(cleaned, "")
+func sanitizeCommonExternalAssets(raw string, stripAllScripts bool) (string, []string) {
+	var deviations []string
+	cleaned := raw
+	if stripAllScripts {
+		for _, pattern := range pelicanAllScriptPatterns {
+			if pattern.MatchString(cleaned) {
+				deviations = append(deviations, "已剥离脚本或受限内嵌标签")
+				cleaned = pattern.ReplaceAllString(cleaned, "")
+			}
+		}
+	} else {
+		for _, pattern := range pelicanExtScriptPatterns {
+			if pattern.MatchString(cleaned) {
+				deviations = append(deviations, "已剥离外部脚本引用")
+				cleaned = pattern.ReplaceAllString(cleaned, "")
+			}
 		}
 	}
-	if pelicanEventAttrPattern.MatchString(cleaned) {
-		deviations = append(deviations, "已剥离内联事件属性")
-		cleaned = pelicanEventAttrPattern.ReplaceAllString(cleaned, "")
+	for _, pattern := range pelicanSharedBlockDrops {
+		if pattern.MatchString(cleaned) {
+			deviations = append(deviations, "已剥离受限外部或内嵌标签")
+			cleaned = pattern.ReplaceAllString(cleaned, "")
+		}
 	}
 	cleaned = pelicanLinkAttrPattern.ReplaceAllStringFunc(cleaned, func(match string) string {
 		parts := pelicanLinkAttrPattern.FindStringSubmatch(match)
@@ -196,25 +220,18 @@ func SanitizePelicanSVG(raw string) (string, []string, error) {
 		deviations = append(deviations, "已拦截外部 CSS url()")
 		cleaned = pelicanCSSExternalURL.ReplaceAllString(cleaned, "none")
 	}
+	return cleaned, deviations
+}
 
-	cleaned, ok := sliceOuterSVG(cleaned)
-	if !ok {
-		return "", nil, errors.New("清洗后未保留有效的 <svg> 根节点")
-	}
-
-	rootLoc := pelicanRootTagPattern.FindStringIndex(cleaned)
-	if rootLoc == nil {
-		return "", nil, errors.New("缺少有效的 <svg> 起始标签")
-	}
-	rootTag := cleaned[rootLoc[0]:rootLoc[1]]
-	lowerRoot := strings.ToLower(rootTag)
+func ensureSVGRootAttrs(rootTag string) (string, []string) {
+	var deviations []string
 	var injected []string
-	if !strings.Contains(lowerRoot, `xmlns=`) {
-		deviations = append(deviations, "根元素缺少 xmlns（已自动补齐）")
+	if !pelicanNamespaceAttr.MatchString(rootTag) {
+		deviations = append(deviations, "SVG 根元素缺少 xmlns（已自动补齐）")
 		injected = append(injected, `xmlns="http://www.w3.org/2000/svg"`)
 	}
-	if !strings.Contains(lowerRoot, "viewbox=") {
-		deviations = append(deviations, "根元素缺少 viewBox（已自动补齐）")
+	if !pelicanViewBoxAttr.MatchString(rootTag) {
+		deviations = append(deviations, "SVG 根元素缺少 viewBox（已自动补齐）")
 		w := "800"
 		h := "600"
 		if wm := pelicanNumericWidthAttr.FindStringSubmatch(rootTag); len(wm) == 2 && wm[1] != "0" {
@@ -231,9 +248,63 @@ func SanitizePelicanSVG(raw string) (string, []string, error) {
 			insertPos = len(rootTag) - 2
 		}
 		rootTag = rootTag[:insertPos] + " " + strings.Join(injected, " ") + rootTag[insertPos:]
-		cleaned = rootTag + cleaned[rootLoc[1]:]
 	}
-	return cleaned, deviations, nil
+	return rootTag, deviations
+}
+
+// SanitizePelicanHTML 剥离 HTML 中的外部资源引用、危险内嵌标签与外部脚本，保留本地动画并补齐 SVG 属性。
+func SanitizePelicanHTML(raw string) (string, string, []string, error) {
+	cleaned, deviations := sanitizeCommonExternalAssets(raw, false)
+	if !containsCompleteSVG(cleaned) {
+		return "", "", nil, errors.New("清洗后未保留有效的 <svg> 节点")
+	}
+	var rootDeviations []string
+	cleaned = pelicanSVGTagPattern.ReplaceAllStringFunc(cleaned, func(tag string) string {
+		updated, devs := ensureSVGRootAttrs(tag)
+		rootDeviations = append(rootDeviations, devs...)
+		return updated
+	})
+	deviations = append(deviations, rootDeviations...)
+
+	rawSVG, ok := sliceOuterSVG(cleaned)
+	if !ok {
+		return "", "", nil, errors.New("清洗后未保留有效的 <svg> 根节点")
+	}
+	cleanSVG, svgDevs, err := SanitizePelicanSVG(rawSVG)
+	if err != nil {
+		return "", "", nil, err
+	}
+	deviations = append(deviations, svgDevs...)
+	return strings.TrimSpace(cleaned), cleanSVG, uniqueStrings(deviations), nil
+}
+
+// SanitizePelicanSVG 移除脚本、事件属性、外部引用与危险嵌入节点，并补齐根元素渲染所需属性。
+func SanitizePelicanSVG(raw string) (string, []string, error) {
+	cleaned := pelicanXMLDeclPattern.ReplaceAllString(raw, "")
+	cleaned = pelicanDoctypePattern.ReplaceAllString(cleaned, "")
+
+	var deviations []string
+	cleaned, assetDevs := sanitizeCommonExternalAssets(cleaned, true)
+	deviations = append(deviations, assetDevs...)
+
+	if pelicanEventAttrPattern.MatchString(cleaned) {
+		deviations = append(deviations, "已剥离内联事件属性")
+		cleaned = pelicanEventAttrPattern.ReplaceAllString(cleaned, "")
+	}
+
+	cleaned, ok := sliceOuterSVG(cleaned)
+	if !ok {
+		return "", nil, errors.New("清洗后未保留有效的 <svg> 根节点")
+	}
+
+	rootLoc := pelicanRootTagPattern.FindStringIndex(cleaned)
+	if rootLoc == nil {
+		return "", nil, errors.New("缺少有效的 <svg> 起始标签")
+	}
+	rootTag, rootDevs := ensureSVGRootAttrs(cleaned[rootLoc[0]:rootLoc[1]])
+	deviations = append(deviations, rootDevs...)
+	cleaned = rootTag + cleaned[rootLoc[1]:]
+	return cleaned, uniqueStrings(deviations), nil
 }
 
 func uniqueStrings(items []string) []string {
@@ -248,29 +319,26 @@ func uniqueStrings(items []string) []string {
 	return out
 }
 
-func truncatePelicanSnippet(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if len(trimmed) > pelicanRawSnippetMaxBytes {
-		return trimmed[:pelicanRawSnippetMaxBytes] + "…"
-	}
-	return trimmed
-}
-
 func pruneTargetPelicanSVGs(rounds []Round) {
 	kept := 0
 	for i := range rounds {
 		p := rounds[i].Evidence.Pelican
-		if p == nil || p.SVG == "" {
+		if p == nil || (p.HTML == "" && p.SVG == "" && p.RawSnippet == "") {
 			continue
 		}
 		if kept < maxRetainedPelicanSVGsPerTarget {
 			kept++
 			continue
 		}
-		if p.SVGBytes == 0 {
+		if p.HTMLBytes == 0 && p.HTML != "" {
+			p.HTMLBytes = len(p.HTML)
+		}
+		if p.SVGBytes == 0 && p.SVG != "" {
 			p.SVGBytes = len(p.SVG)
 		}
+		p.HTML = ""
 		p.SVG = ""
+		p.RawSnippet = ""
 		p.SVGPruned = true
 	}
 }
@@ -287,6 +355,10 @@ type ManualVerdictResponse struct {
 	Status       string  `json:"status"`
 	AppliedGroup *string `json:"appliedGroup"`
 	Message      *string `json:"message"`
+}
+
+func hasPelicanPayload(p *Pelican) bool {
+	return p != nil && (p.HTML != "" || p.HTMLBytes > 0 || p.SVG != "" || p.SVGBytes > 0)
 }
 
 func (s *Service) JudgePelican(ctx context.Context, q ManualVerdictRequest) (ManualVerdictResponse, error) {
@@ -344,15 +416,15 @@ func (s *Service) JudgePelican(ctx context.Context, q ManualVerdictRequest) (Man
 				}
 				continue
 			}
-			if round.Evidence.Pelican != nil && (round.Evidence.Pelican.SVG != "" || round.Evidence.Pelican.SVGBytes > 0) {
+			if hasPelicanPayload(round.Evidence.Pelican) {
 				roundIdx = i
 				break
 			}
 		}
 	}
-	if roundIdx < 0 || target.Rounds[roundIdx].Evidence.Pelican == nil || (target.Rounds[roundIdx].Evidence.Pelican.SVG == "" && target.Rounds[roundIdx].Evidence.Pelican.SVGBytes == 0) {
+	if roundIdx < 0 || !hasPelicanPayload(target.Rounds[roundIdx].Evidence.Pelican) {
 		s.mu.Unlock()
-		return ManualVerdictResponse{}, &apiError{409, "该凭证尚未生成鹈鹕 SVG 动画，请先执行绘画后再进行风控分组"}
+		return ManualVerdictResponse{}, &apiError{409, "该凭证尚未生成鹈鹕动画，请先执行绘制后再进行风控分组"}
 	}
 	settings := clone(s.state.Settings)
 	s.mu.Unlock()
@@ -383,14 +455,16 @@ func (s *Service) JudgePelican(ctx context.Context, q ManualVerdictRequest) (Man
 	if roundIdx >= len(target.Rounds) {
 		return ManualVerdictResponse{}, &apiError{409, "目标检测轮次已变更，请刷新后重试"}
 	}
+	previousTarget := clone(target)
+	previousGroup, previousSync := rec.Group, rec.Sync
 	round := target.Rounds[roundIdx]
 	round.Outcome = q.Verdict
 	if q.Verdict == "normal" {
 		round.ReasonCode = "pelican-judged-normal"
-		round.Reason = "人工肉眼判定：正常（鹈鹕 SVG 动画）"
+		round.Reason = "人工肉眼判定：正常（鹈鹕动画）"
 	} else {
 		round.ReasonCode = "pelican-judged-downshift"
-		round.Reason = "人工肉眼判定：风控（鹈鹕 SVG 动画）"
+		round.Reason = "人工肉眼判定：风控（鹈鹕动画）"
 	}
 	if round.Evidence.Pelican != nil {
 		round.Evidence.Pelican.JudgedVerdict = q.Verdict
@@ -406,6 +480,8 @@ func (s *Service) JudgePelican(ctx context.Context, q ManualVerdictRequest) (Man
 		rec.Sync = syncRecord
 	}
 	if err := s.persistLocked(); err != nil {
+		rec.Targets[q.Model] = previousTarget
+		rec.Group, rec.Sync = previousGroup, previousSync
 		return ManualVerdictResponse{}, err
 	}
 

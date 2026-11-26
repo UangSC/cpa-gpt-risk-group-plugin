@@ -16,7 +16,7 @@ registerInspectionMethod({
 })
 registerInspectionMethod({
   id: 'pelican', label: '画鹈鹕',
-  description: '仅请求绘制「鹈鹕骑自行车」SVG 循环动画，输出后由人工肉眼判定风控分组。',
+  description: '请求创建包含「鹈鹕骑自行车」2D SVG 动画的完整 HTML，支持在线审片、下载 HTML 与人工肉眼分组。',
   challengeCount: 1,
-  validateReply: (reply) => Boolean(reply.pelican?.svg?.trim()),
+  validateReply: (reply) => Boolean(reply.pelican?.html?.trim() || reply.pelican?.svg?.trim()),
 })

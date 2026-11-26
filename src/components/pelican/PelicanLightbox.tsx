@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../../store/store'
 import { evaluateEligibility, judgePelicanVerdict, startInspection } from '../../store/actions'
+import { activeInspectionCredentialIds } from '../../store/exclusions'
 import { isManuallyExcluded } from '../../lib/derive'
 import { formatDateTime, formatDuration } from '../../lib/format'
 import { isCompositionEvent, isEditingTarget, isPlainShortcut } from '../../lib/keyboard'
 import { Chip, HoverCard, Icon, Modal, PlanMark, SecretName } from '../ui'
-import { PelicanSvgFrame, formatSvgBytes, latestPelicanSvgRound } from './PelicanSvgStage'
+import {
+  PelicanSvgFrame,
+  downloadPelicanHtml,
+  formatSvgBytes,
+  hasPelicanArtwork,
+  latestPelicanSvgRound,
+  pelicanByteCount,
+} from './PelicanSvgStage'
 
 export function PelicanLightbox() {
   const lightbox = useStore((s) => s.pelicanLightbox)
@@ -32,7 +40,7 @@ export function PelicanLightbox() {
     () => () => {
       if (autoAdvanceTimerRef.current !== null) window.clearTimeout(autoAdvanceTimerRef.current)
     },
-    [],
+    [lightbox?.credentialId, lightbox?.roundId],
   )
 
   const galleryEntries = useMemo(() => {
@@ -75,7 +83,9 @@ export function PelicanLightbox() {
   const activeRound = useMemo(() => {
     if (!effectiveLightbox || !activeTarget) return null
     if (effectiveLightbox.roundId) {
-      const found = activeTarget.rounds.find((r) => r.id === effectiveLightbox.roundId && Boolean(r.evidence.pelican?.svg))
+      const found = activeTarget.rounds.find(
+        (r) => r.id === effectiveLightbox.roundId && hasPelicanArtwork(r.evidence.pelican),
+      )
       if (found) return found
     }
     return latestPelicanSvgRound(activeTarget)
@@ -97,17 +107,12 @@ export function PelicanLightbox() {
   )
 
   const pelican = activeRound?.evidence.pelican
-  const svg = pelican?.svg ?? ''
+  const hasArtwork = hasPelicanArtwork(pelican)
   const judgedVerdict =
     pelican?.judgedVerdict ??
     (activeRound?.outcome === 'normal' || activeRound?.outcome === 'downshift' ? activeRound.outcome : null)
   const isJudging = Boolean(credential && judging.includes(credential.id))
-  const isRunningTarget = Boolean(
-    activeTarget &&
-      tasks.some(
-        (task) => task.status === 'running' && task.items.some((item) => item.targetId === activeTarget.id),
-      ),
-  )
+  const isRunningTarget = Boolean(credential && activeInspectionCredentialIds({ tasks, targets }).includes(credential.id))
   const canJudge =
     connection === 'connected' &&
     Boolean(credential && !credential.disabled && !isManuallyExcluded(credential)) &&
@@ -118,6 +123,23 @@ export function PelicanLightbox() {
     !starting &&
     !isRunningTarget &&
     Boolean(activeTarget && credential && evaluateEligibility(activeTarget, settings, credential).runnable)
+
+  const handleDownload = useCallback(() => {
+    if (!pelican || !activeTarget || !activeRound) return
+    const ok = downloadPelicanHtml(pelican, {
+      credentialId: activeTarget.credentialId,
+      credentialName: credential?.name,
+      finishedAt: activeRound.finishedAt,
+      maskNames: settings.maskNames,
+    })
+    if (!ok) {
+      useStore.getState().notify({
+        tone: 'warning',
+        title: '下载失败',
+        detail: '当前环境暂不支持触发本地 HTML 下载。',
+      })
+    }
+  }, [pelican, activeTarget, activeRound, credential?.name, settings.maskNames])
 
   const handleJudge = useCallback(
     (verdict: 'normal' | 'downshift') => {
@@ -134,16 +156,17 @@ export function PelicanLightbox() {
           }
         }
       }
-      void judgePelicanVerdict(credential.id, verdict, activeRound.id, activeTarget.model)
-      if (nextUnjudged) {
+      const submittedLightbox = useStore.getState().pelicanLightbox
+      void judgePelicanVerdict(credential.id, verdict, activeRound.id, activeTarget.model).then((saved) => {
+        if (!saved || !nextUnjudged || useStore.getState().pelicanLightbox !== submittedLightbox) return
         if (autoAdvanceTimerRef.current !== null) window.clearTimeout(autoAdvanceTimerRef.current)
         autoAdvanceTimerRef.current = window.setTimeout(() => {
           autoAdvanceTimerRef.current = null
-          if (useStore.getState().pelicanLightbox) {
+          if (useStore.getState().pelicanLightbox === submittedLightbox) {
             openPelicanLightbox(nextUnjudged.credentialId, nextUnjudged.roundId)
           }
         }, 210)
-      }
+      })
     },
     [canJudge, credential, activeRound, activeTarget, judgedVerdict, galleryEntries, galleryIndex, openPelicanLightbox],
   )
@@ -164,6 +187,9 @@ export function PelicanLightbox() {
       } else if (isPlainShortcut(event, '2') && canJudge) {
         event.preventDefault()
         handleJudge('downshift')
+      } else if (isPlainShortcut(event, 'd') && hasArtwork) {
+        event.preventDefault()
+        handleDownload()
       } else if (isPlainShortcut(event, 'r') && canRedraw && activeTarget) {
         event.preventDefault()
         const tid = activeTarget.id
@@ -173,9 +199,21 @@ export function PelicanLightbox() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [lightbox, prevEntry, nextEntry, canJudge, canRedraw, activeTarget, openPelicanLightbox, closePelicanLightbox, handleJudge])
+  }, [
+    lightbox,
+    prevEntry,
+    nextEntry,
+    canJudge,
+    canRedraw,
+    hasArtwork,
+    activeTarget,
+    openPelicanLightbox,
+    closePelicanLightbox,
+    handleDownload,
+    handleJudge,
+  ])
 
-  if (!activeTarget || !activeRound || !pelican?.svg) return null
+  if (!activeTarget || !activeRound || !pelican || !hasArtwork) return null
 
   const effectiveScheme: 'light' | 'dark' = invertBackdrop
     ? settings.theme === 'dark'
@@ -216,7 +254,7 @@ export function PelicanLightbox() {
           {activeRound.evidence.usage && (
             <span>· {activeRound.evidence.usage.outputTokens.toLocaleString('zh-CN')} tok</span>
           )}
-          <span>· {formatSvgBytes(pelican.svgBytes || svg.length)}</span>
+          <span>· {formatSvgBytes(pelicanByteCount(pelican))}</span>
           {!pelican.strictFormat && <span className="pelican-sub-warn">· 宽容提取</span>}
         </span>
       }
@@ -234,6 +272,16 @@ export function PelicanLightbox() {
           >
             <Icon.Doc />
             <span>查看依据与源码</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={handleDownload}
+          >
+            <Icon.Download />
+            <span>下载 HTML</span>
+            <kbd className="btn-kbd" aria-hidden="true">D</kbd>
           </button>
 
           <button
@@ -287,7 +335,7 @@ export function PelicanLightbox() {
           compact
           placement="bottom"
           wrapperClassName="pelican-lightbox-contrast-anchor"
-          content={invertBackdrop ? '恢复跟随主题衬底' : '切换明/暗对比衬底（适用于透明线条画作）'}
+          content={invertBackdrop ? '恢复跟随主题衬底' : '切换明/暗对比衬底（适用于透明背景画作）'}
         >
           <button
             type="button"
@@ -313,8 +361,10 @@ export function PelicanLightbox() {
 
         <div className="pelican-lightbox-canvas" key={activeRound.id}>
           <PelicanSvgFrame
-            svg={svg}
+            html={pelican.html}
+            svg={pelican.svg ?? ''}
             colorScheme={effectiveScheme}
+            invertContrast={invertBackdrop}
             title={`${credential?.name ?? activeTarget.credentialId} 鹈鹕骑自行车动画大图`}
             interactive
             lazy={false}

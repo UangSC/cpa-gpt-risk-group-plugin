@@ -31,7 +31,7 @@ var methodSpecs = map[string]inspectionMethodSpec{
 		missingReason:               defaultCandyMissingReason,
 		countsTransientServiceError: true,
 		challenges: func() ([]fingerprint.Challenge, string) {
-			return []fingerprint.Challenge{{ID: "candy-bag-21", Question: CandyQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
+			return []fingerprint.Challenge{{ID: candyPromptID, Question: CandyQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
 		},
 		runningNote: func(int) *string { return nil },
 		formatHTTPReason: func(codeText string, _ int, pureHTTP bool) string {
@@ -89,19 +89,19 @@ var methodSpecs = map[string]inspectionMethodSpec{
 		missingReason:               defaultPelicanMissingReason,
 		countsTransientServiceError: false,
 		challenges: func() ([]fingerprint.Challenge, string) {
-			return []fingerprint.Challenge{{ID: "pelican-bicycle-svg", Question: PelicanQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
+			return []fingerprint.Challenge{{ID: pelicanPromptID, Question: PelicanQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
 		},
 		runningNote: func(int) *string {
-			return str("正在请求模型绘制鹈鹕骑车 SVG 动画")
+			return str("正在请求模型创建鹈鹕骑车 HTML 动画")
 		},
 		formatHTTPReason: func(codeText string, _ int, pureHTTP bool) string {
 			if pureHTTP {
-				return fmt.Sprintf("请求返回错误码 %s，未取得有效 SVG 绘画", codeText)
+				return fmt.Sprintf("请求返回错误码 %s，未取得有效鹈鹕动画", codeText)
 			}
-			return fmt.Sprintf("请求异常（含错误码 %s），未取得有效 SVG 绘画", codeText)
+			return fmt.Sprintf("请求异常（含错误码 %s），未取得有效鹈鹕动画", codeText)
 		},
 		formatNetworkReason: func(networkErrors int, _ int) string {
-			return fmt.Sprintf("网络连接异常（×%d），未取得有效 SVG 绘画", networkErrors)
+			return fmt.Sprintf("网络连接异常（×%d），未取得有效鹈鹕动画", networkErrors)
 		},
 	},
 }

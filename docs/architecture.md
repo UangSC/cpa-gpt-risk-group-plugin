@@ -34,7 +34,7 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 
 - `service.go` 管理服务生命周期、状态加载与迁移。
 - `methods.go` 集中注册各检测方式（`candy`、`fingerprint`、`pelican`）的初始轮次状态、挑战题入口、运行进度文案、错误归因模板与频繁异常累计策略，便于后续扩展新检测方式。
-- `candy.go` 保存糖果题和数字匹配规则；`pelican.go` 保存画鹈鹕 SVG 题目、源码提取安全清洗与人工分组同步入口。
+- `candy.go` 保存糖果题和数字匹配规则；`pelican.go` 保存画鹈鹕 HTML+SVG 动画题目、外部资产剥离清洗与人工分组同步入口。
 - `tasks.go` 管理任务入队、并发、取消与进度。
 - `inspection.go` 检查单凭证资格并保存判定、同步分类；`execution.go` 执行题目和共用的有限重试。
 - `service_errors.go` 按单轮真实请求数或连续失败轮数判定频繁 502/503/429；`quota_refresh.go` 以四个工作协程刷新明确提交的凭证并持久保存额度。
@@ -62,8 +62,8 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 - `views/` 负责概览、统计、历史、设置四大主视图的状态编排；`components/` 按职责拆分为六个子目录与顶层全局浮层：
   - `components/overview/`：概览顶栏筛选与健康条、快捷配置浮层、并发步进器、吸顶工具栏与跨页批量操作栏。
   - `components/credentials/`：双栏池、列表、自适应卡片与鹈鹕相册四种凭证布局及共享配额、路由、一键单测部件。
-  - `components/pelican/`：`PelicanSvgStage` 沙箱 `iframe` 安全渲染与 `PelicanLightbox` 极简快速审片台（快捷键判定与未判画作自动流转）。
-  - `components/evidence/`：`EvidenceSheet` 判定依据弹窗及糖果题、模型指纹、画鹈鹕（含折叠 SVG 源码与一键复制）、请求重试与分组同步子面板。
+  - `components/pelican/`：`PelicanSvgStage` 沙箱 `iframe` 渲染与 HTML 下载，在线和下载画布均以前置 CSP 限制外部资源，并隔离动画脚本的同源权限。`PelicanLightbox` 在判定保存成功且仍停留于原画作时流转到下一幅待判画作。
+  - `components/evidence/`：`EvidenceSheet` 判定依据弹窗及糖果题、模型指纹、画鹈鹕（含折叠 HTML/SVG 源码、一键复制和沙箱 HTML 下载）、请求重试与分组同步子面板。
   - `components/settings/`：分组前缀、优先级、检测方式、巡检模型、额度门槛、重试规则、请求头覆盖、定时巡检、分页与历史清理面板。
   - `components/ui/`：按钮、滑块胶囊指示器（`useSlidingIndicator`）、自定义下拉、折叠面板、模态框、悬浮提示（`HoverCard`）与跨页区间选择上下文（`SelectionProvider`）。
 - `lib/historyBatches.ts` 根据轮次 `taskId` 与 `batchStartedAt` 归批，历史和任务面板共享折叠组件。旧记录只在可靠任务身份和时间区间唯一匹配时归并；折叠时不挂载大量凭证条目。

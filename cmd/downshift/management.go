@@ -73,8 +73,8 @@ func (p *plugin) management(raw []byte) (any, error) {
 		return jsonResponse(404, "接口不存在"), nil
 	}
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	service, adapter := p.service, p.adapter
-	p.mu.RUnlock()
 	if service == nil {
 		return jsonResponse(503, "插件服务尚未初始化"), nil
 	}

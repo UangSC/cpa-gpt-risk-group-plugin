@@ -169,11 +169,11 @@ export function inspectionResult(round: InspectionRound): InspectionResult | nul
     }
   }
   if (candy) return { kind: 'candy', answer: candyAnswer(candy), rawAnswer: compactAnswerText(candy.answer), matched: candy.matched }
-  if (pelican && (pelican.svg || pelican.svgBytes > 0)) {
+  if (pelican && (pelican.html || pelican.svg || (pelican.htmlBytes ?? 0) > 0 || pelican.svgBytes > 0)) {
     return {
       kind: 'pelican',
-      hasSvg: Boolean(pelican.svg),
-      svgBytes: pelican.svgBytes,
+      hasSvg: Boolean(pelican.html || pelican.svg),
+      svgBytes: pelican.htmlBytes || pelican.svgBytes,
       strictFormat: pelican.strictFormat,
       judgedVerdict: pelican.judgedVerdict,
     }
@@ -216,9 +216,9 @@ export function inspectionResultReason(round: InspectionRound): string | null {
     return `${result.matched ? '糖果题答案正确' : '糖果题答案不正确'}：${result.rawAnswer}`
   }
   if (result?.kind === 'pelican') {
-    if (result.judgedVerdict === 'normal' || round.outcome === 'normal') return '人工肉眼判定：正常（鹈鹕 SVG 动画）'
-    if (result.judgedVerdict === 'downshift' || round.outcome === 'downshift') return '人工肉眼判定：风控（鹈鹕 SVG 动画）'
-    return '已生成鹈鹕骑自行车 SVG 动画，待肉眼判定分组'
+    if (result.judgedVerdict === 'normal' || round.outcome === 'normal') return '人工肉眼判定：正常（鹈鹕动画）'
+    if (result.judgedVerdict === 'downshift' || round.outcome === 'downshift') return '人工肉眼判定：风控（鹈鹕动画）'
+    return '已生成鹈鹕骑自行车 HTML 动画，待肉眼判定分组'
   }
 
   const errInfo = roundErrorInfo(round)
@@ -236,24 +236,24 @@ export function inspectionResultReason(round: InspectionRound): string | null {
       return fp
         ? `请求返回错误码 ${errInfo.codesSummary}，未取得有效样本（${fp.validSamples}/${required}）`
         : isPelican
-          ? `请求返回错误码 ${errInfo.codesSummary}，未取得有效 SVG 绘画`
+          ? `请求返回错误码 ${errInfo.codesSummary}，未取得有效鹈鹕动画`
           : `请求返回错误码 ${errInfo.codesSummary}，未取得有效回答`
     }
     return fp
       ? `请求异常（含错误码 ${errInfo.codesSummary}），模型指纹样本不足（${fp.validSamples}/${required}）`
       : isPelican
-        ? `请求异常（含错误码 ${errInfo.codesSummary}），未取得有效 SVG 绘画`
+        ? `请求异常（含错误码 ${errInfo.codesSummary}），未取得有效鹈鹕动画`
         : `请求异常（含错误码 ${errInfo.codesSummary}），未取得有效回答`
   }
   if (errInfo.networkErrors > 0) {
     return fp
       ? `网络连接异常，模型指纹样本不足（${fp.validSamples}/${required}）`
       : isPelican
-        ? `网络连接异常（×${errInfo.networkErrors}），未取得有效 SVG 绘画`
+        ? `网络连接异常（×${errInfo.networkErrors}），未取得有效鹈鹕动画`
         : `网络连接异常（×${errInfo.networkErrors}），未取得有效回答`
   }
   if (isPelican && round.evidence.pelican?.rawSnippet) {
-    return '模型未返回有效的 <svg> 源码，待重新绘制'
+    return '模型未返回包含有效 <svg> 的 HTML 代码，待重新绘制'
   }
   if (fp && (fp.consistency === 'insufficient' || fp.validSamples < required)) {
     return `模型指纹样本不足（${fp.validSamples}/${required}）`

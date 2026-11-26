@@ -18,9 +18,12 @@ import {
 } from './CredentialParts'
 import {
   PelicanSvgFrame,
+  downloadPelicanHtml,
   formatSvgBytes,
+  hasPelicanArtwork,
   latestPelicanRound,
   latestPelicanSvgRound,
+  pelicanByteCount,
 } from '../pelican/PelicanSvgStage'
 
 const WINDOW_SHORT: Record<string, string> = {
@@ -112,11 +115,11 @@ export function PelicanAlbumGrid({
         const svgRound = latestPelicanSvgRound(view.target)
         const pelicanRound = latestPelicanRound(view.target)
         const pelicanData = svgRound?.evidence.pelican
-        const svg = pelicanData?.svg ?? ''
-        const hasSvg = Boolean(svg)
+        const hasArtwork = hasPelicanArtwork(pelicanData)
+        const artworkBytes = pelicanByteCount(pelicanData)
 
         const latestFailedPelican =
-          pelicanRound && !pelicanRound.evidence.pelican?.svg ? pelicanRound : null
+          pelicanRound && !hasPelicanArtwork(pelicanRound.evidence.pelican) ? pelicanRound : null
         const failedErrorCode = latestFailedPelican
           ? roundErrorInfo(latestFailedPelican).lastCodeLabel ?? latestCredentialErrorCode(view)
           : null
@@ -141,7 +144,7 @@ export function PelicanAlbumGrid({
           eligibility.runnable
 
         const canJudge =
-          hasSvg &&
+          hasArtwork &&
           runtime.connected &&
           !isDisabled &&
           !isManuallyExcluded(credential) &&
@@ -158,102 +161,128 @@ export function PelicanAlbumGrid({
 
         const elapsedLabel = activity?.elapsedSec != null ? ` ${activity.elapsedSec}s` : ''
 
+        const inlineStatusBadge = activity ? (
+          <Chip tone={activity.chipTone} dot>
+            {activity.kind === 'inspecting' ? `绘画中${elapsedLabel}` : activity.label}
+          </Chip>
+        ) : hasArtwork ? (
+          judgedVerdict === 'normal' ? (
+            <span className="verdict verdict-normal is-sm">
+              <span className="dot dot-normal" aria-hidden="true" />
+              正常
+            </span>
+          ) : judgedVerdict === 'downshift' ? (
+            <span className="verdict verdict-downshift is-sm">
+              <span className="dot dot-downshift" aria-hidden="true" />
+              风控
+            </span>
+          ) : (
+            <span className="verdict verdict-uncertain is-sm">
+              <span className="dot dot-uncertain" aria-hidden="true" />
+              待判定
+            </span>
+          )
+        ) : latestFailedPelican ? (
+          <HoverCard
+            compact
+            content={
+              <>
+                <div className="tip-v-danger">{resolvedRoundReason(latestFailedPelican)}</div>
+                {failedErrorCode && (
+                  <div className="tip-row tip-error-code-row">
+                    <span className="tip-k">最后错误码</span>
+                    <span className="tip-v tip-v-danger mono">{failedErrorCode}</span>
+                  </div>
+                )}
+              </>
+            }
+          >
+            <span className="verdict verdict-error is-sm">
+              <span className="dot dot-error" aria-hidden="true" />
+              未完成
+            </span>
+          </HoverCard>
+        ) : null
+
         return (
           <article
             key={credential.id}
             data-testid={`pelican-card-${credential.id}`}
             data-credential-id={credential.id}
             data-exclusion-source={!isDisabled ? 'true' : undefined}
-            className={`pelican-album-card${judgedVerdict ? ` tone-${judgedVerdict}` : hasSvg ? ' tone-awaiting' : ''}${selected ? ' is-selected' : ''}${isDisabled ? ' is-disabled-cred' : ''}${activity ? ` is-active is-${activity.kind}` : ''}`}
+            className={`pelican-album-card${judgedVerdict ? ` tone-${judgedVerdict}` : hasArtwork ? ' tone-awaiting' : ''}${selected ? ' is-selected' : ''}${isDisabled ? ' is-disabled-cred' : ''}${activity ? ` is-active is-${activity.kind}` : ''}`}
           >
             <ActivityRail activity={activity} />
 
-            {/* Zone 1: Pure, unobstructed 16:10 Artwork Stage */}
+            {/* Zone 1: Artwork Stage */}
             <div className="pelican-stage">
-              <div className="pelican-stage-top">
-                <label
-                  className="pelican-select-pill"
-                  onClick={(event) => stop(event)}
-                  title={isDisabled ? '已关闭的凭证无法勾选' : '勾选加入批量操作（支持 Shift 连选）'}
+              {!isDisabled && (
+                <button
+                  type="button"
+                  className={`pelican-corner-check${selected ? ' is-selected' : ''}`}
+                  aria-pressed={selected}
+                  aria-label={selected ? `取消选择凭证 ${credential.name}` : `选择凭证 ${credential.name}`}
+                  title={selected ? '取消选中（支持 Shift 连选）' : '选中加入批量操作（支持 Shift 连选）'}
+                  onClick={(event) => {
+                    stop(event)
+                    selection.toggle(credential.id, event.shiftKey)
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    className="checkbox"
-                    checked={selected}
-                    disabled={isDisabled}
-                    onClick={(event) => {
-                      stop(event)
-                      if (!isDisabled) selection.toggle(credential.id, event.shiftKey)
-                    }}
-                    onChange={() => {}}
-                    aria-label={isDisabled ? '已关闭的凭证无法勾选' : `选择凭证 ${credential.name}`}
-                  />
-                  <PlanMark plan={credential.plan} size="sm" />
-                </label>
+                  <Icon.Check />
+                </button>
+              )}
 
-                <div className="pelican-stage-badges">
-                  {hasSvg && canDraw && view.target && (
-                    <HoverCard compact placement="top" content="重新绘制一轮鹈鹕动画">
-                      <button
-                        type="button"
-                        className="pelican-stage-icon-btn is-hover-only"
-                        aria-label="重新绘制鹈鹕动画"
-                        onClick={(event) => {
-                          stop(event)
-                          void startInspection('manual', [view.target!.id])
-                        }}
-                      >
-                        <Icon.Refresh />
-                      </button>
-                    </HoverCard>
-                  )}
+              {hasArtwork && (
+                <div className="pelican-stage-top">
+                  <div className="pelican-stage-badges">
+                    {pelicanData && (
+                      <HoverCard compact placement="top" content="下载 HTML 动画文件到本地">
+                        <button
+                          type="button"
+                          className="pelican-stage-icon-btn is-hover-only"
+                          aria-label="下载鹈鹕 HTML 动画"
+                          onClick={(event) => {
+                            stop(event)
+                            const ok = downloadPelicanHtml(pelicanData, {
+                              credentialId: credential.id,
+                              credentialName: credential.name,
+                              finishedAt: svgRound?.finishedAt,
+                              maskNames: runtime.settings.maskNames,
+                            })
+                            if (!ok) {
+                              useStore.getState().notify({
+                                tone: 'warning',
+                                title: '下载失败',
+                                detail: '当前环境暂不支持触发本地 HTML 下载。',
+                              })
+                            }
+                          }}
+                        >
+                          <Icon.Download />
+                        </button>
+                      </HoverCard>
+                    )}
 
-                  {activity ? (
-                    <Chip tone={activity.chipTone} dot>
-                      {activity.kind === 'inspecting' ? `绘画中${elapsedLabel}` : activity.label}
-                    </Chip>
-                  ) : hasSvg ? (
-                    judgedVerdict === 'normal' ? (
-                      <span className="verdict verdict-normal is-sm">
-                        <span className="dot dot-normal" aria-hidden="true" />
-                        正常
-                      </span>
-                    ) : judgedVerdict === 'downshift' ? (
-                      <span className="verdict verdict-downshift is-sm">
-                        <span className="dot dot-downshift" aria-hidden="true" />
-                        风控
-                      </span>
-                    ) : (
-                      <span className="verdict verdict-uncertain is-sm">
-                        <span className="dot dot-uncertain" aria-hidden="true" />
-                        待判定
-                      </span>
-                    )
-                  ) : latestFailedPelican ? (
-                    <HoverCard
-                      compact
-                      content={
-                        <>
-                          <div className="tip-v-danger">{resolvedRoundReason(latestFailedPelican)}</div>
-                          {failedErrorCode && (
-                            <div className="tip-row tip-error-code-row">
-                              <span className="tip-k">最后错误码</span>
-                              <span className="tip-v tip-v-danger mono">{failedErrorCode}</span>
-                            </div>
-                          )}
-                        </>
-                      }
-                    >
-                      <span className="verdict verdict-error is-sm">
-                        <span className="dot dot-error" aria-hidden="true" />
-                        未完成
-                      </span>
-                    </HoverCard>
-                  ) : null}
+                    {canDraw && view.target && (
+                      <HoverCard compact placement="top" content="重新绘制一轮鹈鹕动画">
+                        <button
+                          type="button"
+                          className="pelican-stage-icon-btn is-hover-only"
+                          aria-label="重新绘制鹈鹕动画"
+                          onClick={(event) => {
+                            stop(event)
+                            void startInspection('manual', [view.target!.id])
+                          }}
+                        >
+                          <Icon.Refresh />
+                        </button>
+                      </HoverCard>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {hasSvg ? (
+              {hasArtwork ? (
                 <>
                   <button
                     type="button"
@@ -263,7 +292,8 @@ export function PelicanAlbumGrid({
                   >
                     <span className="pelican-artwork-mat">
                       <PelicanSvgFrame
-                        svg={svg}
+                        html={pelicanData?.html}
+                        svg={pelicanData?.svg ?? ''}
                         colorScheme={runtime.settings.theme}
                         title={`${credential.name} 鹈鹕骑自行车动画`}
                       />
@@ -292,14 +322,14 @@ export function PelicanAlbumGrid({
                         ? '请求异常，等待重试绘制…'
                         : activity.label}
                   </strong>
-                  <span>生成循环 SVG 动画约需十余秒，完成后自动呈现</span>
+                  <span>生成 2D 动画 HTML 约需十余秒，完成后自动呈现</span>
                 </div>
               ) : latestFailedPelican ? (
                 <div className="pelican-stage-empty is-failed">
                   <div className="pelican-empty-emblem is-danger">
                     <Icon.Alert />
                   </div>
-                  <strong className="pelican-error-title">未能生成有效 SVG 画作</strong>
+                  <strong className="pelican-error-title">未能生成有效鹈鹕动画</strong>
                   <span className="pelican-error-detail">{resolvedRoundReason(latestFailedPelican)}</span>
                   {canDraw && view.target && (
                     <button
@@ -329,7 +359,7 @@ export function PelicanAlbumGrid({
                     <Icon.PelicanBike />
                   </span>
                   <strong>点击开始绘制鹈鹕动画</strong>
-                  <span>生成后通过画面质量快速判别正常或风控</span>
+                  <span>生成后可在线审片、下载 HTML 并快速判别风控</span>
                 </button>
               ) : (
                 <div className="pelican-stage-empty">
@@ -348,7 +378,7 @@ export function PelicanAlbumGrid({
               )}
             </div>
 
-            {/* Zone 2: Selectable Identity & Routing Caption */}
+            {/* Zone 2: Selectable Identity, Priority/Weight + Status Badge */}
             <div
               className="pelican-caption"
               onClick={(event) => {
@@ -368,7 +398,7 @@ export function PelicanAlbumGrid({
                     placement="top"
                     content={
                       svgRound
-                        ? `耗时 ${formatDuration(svgRound.evidence.durationMs)} · ${formatSvgBytes(pelicanData!.svgBytes || svg.length)}${!pelicanData!.strictFormat ? ' · 宽容提取' : ''} · 点击查看依据`
+                        ? `耗时 ${formatDuration(svgRound.evidence.durationMs)} · ${formatSvgBytes(artworkBytes)}${!pelicanData?.strictFormat ? ' · 宽容提取' : ''} · 点击查看依据`
                         : '点击查看请求记录与完整依据'
                     }
                   >
@@ -398,6 +428,7 @@ export function PelicanAlbumGrid({
                 <div className="pelican-routing-inline" onClick={stop}>
                   <GroupCell view={view} settings={runtime.settings} />
                   <CredentialRouting credential={credential} compact />
+                  {inlineStatusBadge}
                 </div>
                 <CompactQuotaStrip
                   view={view}
@@ -408,46 +439,52 @@ export function PelicanAlbumGrid({
               </div>
             </div>
 
-            {/* Zone 3: State-Aware Minimalist Footer (No dead disabled judgment buttons when undrawn) */}
+            {/* Zone 3: Balanced 3-Column Footer with Bottom-Centered Plan Badge */}
             <div className="pelican-action-bar" onClick={stop}>
-              {hasSvg ? (
-                <div className="pelican-verdict-switch" role="group" aria-label="肉眼判定风控分组">
-                  <HoverCard compact placement="top" content={`判为正常 · ${routingModeHint}`}>
-                    <button
-                      type="button"
-                      className={`pelican-verdict-opt is-normal${judgedVerdict === 'normal' ? ' is-selected' : ''}`}
-                      aria-pressed={judgedVerdict === 'normal'}
-                      disabled={!canJudge}
-                      onClick={() => void judgePelicanVerdict(credential.id, 'normal', svgRound?.id)}
-                    >
-                      <Icon.Check />
-                      <span>正常</span>
-                    </button>
-                  </HoverCard>
-                  <HoverCard compact placement="top" content={`判为风控 · ${routingModeHint}`}>
-                    <button
-                      type="button"
-                      className={`pelican-verdict-opt is-downshift${judgedVerdict === 'downshift' ? ' is-selected' : ''}`}
-                      aria-pressed={judgedVerdict === 'downshift'}
-                      disabled={!canJudge}
-                      onClick={() => void judgePelicanVerdict(credential.id, 'downshift', svgRound?.id)}
-                    >
-                      <span className="pelican-judge-bang" aria-hidden="true">!</span>
-                      <span>风控</span>
-                    </button>
-                  </HoverCard>
-                </div>
-              ) : (
-                <span className="pelican-await-hint">
-                  {activity
-                    ? '生成完成后在此判定分组'
-                    : isDisabled
-                      ? '已停用'
-                      : isFreeSkipped(credential, runtime.settings)
-                        ? '默认免检'
-                        : '生成画作后可人工判定'}
-                </span>
-              )}
+              <div className="pelican-action-left">
+                {hasArtwork ? (
+                  <div className="pelican-verdict-switch" role="group" aria-label="肉眼判定风控分组">
+                    <HoverCard compact placement="top" content={`判为正常 · ${routingModeHint}`}>
+                      <button
+                        type="button"
+                        className={`pelican-verdict-opt is-normal${judgedVerdict === 'normal' ? ' is-selected' : ''}`}
+                        aria-pressed={judgedVerdict === 'normal'}
+                        disabled={!canJudge}
+                        onClick={() => void judgePelicanVerdict(credential.id, 'normal', svgRound?.id)}
+                      >
+                        <Icon.Check />
+                        <span>正常</span>
+                      </button>
+                    </HoverCard>
+                    <HoverCard compact placement="top" content={`判为风控 · ${routingModeHint}`}>
+                      <button
+                        type="button"
+                        className={`pelican-verdict-opt is-downshift${judgedVerdict === 'downshift' ? ' is-selected' : ''}`}
+                        aria-pressed={judgedVerdict === 'downshift'}
+                        disabled={!canJudge}
+                        onClick={() => void judgePelicanVerdict(credential.id, 'downshift', svgRound?.id)}
+                      >
+                        <span className="pelican-judge-bang" aria-hidden="true">!</span>
+                        <span>风控</span>
+                      </button>
+                    </HoverCard>
+                  </div>
+                ) : (
+                  <span className="pelican-await-hint">
+                    {activity
+                      ? '完成后可判定'
+                      : isDisabled
+                        ? '已停用'
+                        : isFreeSkipped(credential, runtime.settings)
+                          ? '默认免检'
+                          : '生成后可判定'}
+                  </span>
+                )}
+              </div>
+
+              <div className="pelican-plan-center">
+                <PlanMark plan={credential.plan} size="sm" />
+              </div>
 
               <div className="pelican-utility-actions">
                 <Actions view={view} runtime={runtime} mode="card" compact />

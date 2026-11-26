@@ -77,6 +77,8 @@
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-1);
   overflow: hidden;
+  container-type: inline-size;
+  container-name: pelican-card;
   transition:
     transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.16s ease,
@@ -148,42 +150,87 @@
   z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   pointer-events: none;
 }
 
-.pelican-select-pill,
+.pelican-corner-check {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-3);
+  display: block;
+  cursor: pointer;
+  opacity: 0;
+  transform: translate(-8px, -8px) scale(0.84);
+  transform-origin: top left;
+  pointer-events: none;
+  transition:
+    opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.2s cubic-bezier(0.22, 1.28, 0.36, 1),
+    background-color 0.16s ease,
+    color 0.14s ease;
+}
+
+.pelican-corner-check > svg {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pelican-album-card:hover .pelican-corner-check,
+.pelican-album-card:focus-within .pelican-corner-check,
+.pelican-corner-check:focus-visible {
+  opacity: 0.92;
+  transform: translate(0, 0) scale(1);
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .pelican-corner-check {
+    opacity: 0.85;
+    transform: translate(0, 0) scale(1);
+    pointer-events: auto;
+  }
+}
+
+.pelican-corner-check:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent-soft) 92%, var(--surface));
+  color: var(--accent);
+}
+
+.pelican-corner-check.is-selected {
+  opacity: 1 !important;
+  transform: translate(0, 0) scale(1);
+  pointer-events: auto;
+  background: var(--accent);
+  color: #ffffff;
+  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 34%, transparent));
+}
+
+.pelican-corner-check.is-selected > svg {
+  transform: scale(1.06);
+}
+
 .pelican-stage-badges {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.pelican-select-pill {
-  height: 26px;
-  padding: 0 7px 0 6px;
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--surface) 84%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  cursor: pointer;
-  transition: background-color 0.14s ease, border-color 0.14s ease;
-}
-
-.pelican-select-pill:hover {
-  background: var(--surface);
-  border-color: var(--border-strong);
-}
-
-.pelican-stage-badges .verdict,
-.pelican-stage-badges .chip {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .pelican-stage-icon-btn {
@@ -532,6 +579,7 @@ button.pelican-stage-empty.is-clickable-easel:hover strong {
 .pelican-routing-inline {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
@@ -628,17 +676,34 @@ button.pelican-stage-empty.is-clickable-easel:hover strong {
   padding: 7px 12px 9px;
   border-top: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 8px;
   min-height: 43px;
+}
+
+.pelican-action-left {
+  justify-self: start;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pelican-plan-center {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
 
 .pelican-await-hint {
   font-size: 11.5px;
   color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Compact unified 2-segment verdict pill on drawn cards */
@@ -797,10 +862,25 @@ button.pelican-stage-empty.is-clickable-easel:hover strong {
 }
 
 .pelican-utility-actions {
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
+}
+
+@container pelican-card (max-width: 410px) {
+  .pelican-action-bar .btn-exclude {
+    width: 26px;
+    padding: 0;
+  }
+
+  .pelican-action-bar .btn-exclude-label {
+    display: none;
+  }
+
+  .pelican-verdict-opt {
+    padding: 0 7px;
+  }
 }
 
 /* ------------------------------------------- Minimalist Quick-Look Lightbox */
@@ -1040,6 +1120,12 @@ button.pelican-stage-empty.is-clickable-easel:hover strong {
   font: 11.5px/1.55 var(--mono);
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.pelican-album-card:hover .icon-btn.cred-quick-run,
+.pelican-album-card:focus-within .icon-btn.cred-quick-run {
+  opacity: 1;
+  transform: scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -216,7 +216,7 @@ export function sortPelicanViews(
   return views
     .map((view) => {
       const rounds = view.target?.rounds ?? []
-      const svgRound = rounds.find((round) => Boolean(round.evidence.pelican?.svg))
+      const svgRound = rounds.find((round) => Boolean(round.evidence.pelican?.html || round.evidence.pelican?.svg))
       const pelicanRound = rounds.find((round) => Boolean(round.evidence.pelican) || round.tests.includes('pelican'))
       let rank = 3
       let ts = 0

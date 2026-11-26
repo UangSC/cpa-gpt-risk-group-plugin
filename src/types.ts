@@ -86,7 +86,7 @@ export interface CandyEvidence {
   promptId: string
   /** The question text, kept so the evidence sheet can show exactly what was asked. */
   question: string
-  /** What a correct answer must contain, e.g. the standalone number `21`. */
+  /** The standalone integer expected by the rule recorded for this round. */
   expected: string
   /** Verbatim model answer, already truncated by the backend. */
   answer: string
@@ -99,6 +99,8 @@ export interface CandyEvidence {
 export interface PelicanEvidence {
   promptId: string
   question: string
+  html?: string
+  htmlBytes?: number
   svg?: string
   svgBytes: number
   svgPruned?: boolean

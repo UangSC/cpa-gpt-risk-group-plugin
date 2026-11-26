@@ -97,6 +97,7 @@ challengeLoop:
 			status := any(reply.Status)
 			valid := err == nil && reply.Status >= 200 && reply.Status < 300 && strings.TrimSpace(reply.Answer) != ""
 			var numbers []int
+			var pelicanHTML string
 			var pelicanSVG string
 			var pelicanStrict bool
 			var pelicanFormatNote string
@@ -118,13 +119,13 @@ challengeLoop:
 					Sample:        truncateAnswer(reply.Answer),
 				})
 			} else if valid && q.Method == "pelican" {
-				pelicanSVG, pelicanStrict, pelicanFormatNote, sampleError = ExtractPelicanSVG(reply.Answer)
+				pelicanHTML, pelicanSVG, pelicanStrict, pelicanFormatNote, sampleError = ExtractPelicanHTML(reply.Answer)
 				valid = sampleError == nil
 				if !valid {
 					round.Evidence.Pelican = &Pelican{
-						PromptID:   "pelican-bicycle-svg",
+						PromptID:   pelicanPromptID,
 						Question:   PelicanQuestion,
-						RawSnippet: truncatePelicanSnippet(reply.Answer),
+						RawSnippet: reply.Answer,
 						FormatNote: sampleError.Error(),
 					}
 				}
@@ -200,7 +201,7 @@ challengeLoop:
 					answer := truncateAnswer(reply.Answer)
 					preview := compactAnswerPreview(answer)
 					matched := MatchesCandy(answer)
-					round.Evidence.Candy = &Candy{"candy-bag-21", CandyQuestion, "21", answer, matched, "接受含独立数字 21 的回答；子串和小数不计入。"}
+					round.Evidence.Candy = &Candy{candyPromptID, CandyQuestion, candyExpectedAnswer, answer, matched, fmt.Sprintf("接受含独立数字 %s 的回答；子串和小数不计入。", candyExpectedAnswer)}
 					if matched {
 						round.Outcome, round.ReasonCode, round.Reason = "normal", "all-tests-passed", fmt.Sprintf("糖果题答案正确：%s", preview)
 						if retries > 0 {
@@ -212,8 +213,10 @@ challengeLoop:
 					break challengeLoop
 				case "pelican":
 					round.Evidence.Pelican = &Pelican{
-						PromptID:     "pelican-bicycle-svg",
+						PromptID:     pelicanPromptID,
 						Question:     PelicanQuestion,
+						HTML:         pelicanHTML,
+						HTMLBytes:    len(pelicanHTML),
 						SVG:          pelicanSVG,
 						SVGBytes:     len(pelicanSVG),
 						StrictFormat: pelicanStrict,
@@ -221,9 +224,9 @@ challengeLoop:
 					}
 					round.Outcome = "uncertain"
 					round.ReasonCode = "pelican-awaiting-judgment"
-					round.Reason = "已生成鹈鹕骑自行车 SVG 动画，待肉眼判定分组"
+					round.Reason = "已生成鹈鹕骑自行车 HTML 动画，待肉眼判定分组"
 					if retries > 0 {
-						round.Reason = "重试后已生成鹈鹕骑自行车 SVG 动画，待肉眼判定分组"
+						round.Reason = "重试后已生成鹈鹕骑自行车 HTML 动画，待肉眼判定分组"
 					}
 					break challengeLoop
 				default:
@@ -283,7 +286,7 @@ func finalizeErrorReason(round *Round, spec inspectionMethodSpec, validSamples i
 		return
 	}
 	if spec.id == "pelican" && round.Evidence.Pelican != nil && round.Evidence.Pelican.RawSnippet != "" {
-		round.Reason = "模型未返回有效的 <svg> 源码，待重新绘制"
+		round.Reason = "模型未返回包含有效 <svg> 的 HTML 代码，待重新绘制"
 	}
 }
 

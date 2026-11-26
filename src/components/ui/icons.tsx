@@ -240,6 +240,17 @@ export const Icon = {
       />
     </svg>
   ),
+  Download: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path
+        d="M8 2.4v7.6m0 0-2.9-2.9M8 10l2.9-2.9M3 12.2v.6c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-.6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
   Code: () => (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
       <path

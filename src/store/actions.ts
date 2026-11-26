@@ -210,8 +210,8 @@ export async function judgePelicanVerdict(
   }
   const requestKey = currentManagementKey()
   const model = modelOverride ?? state.settings.inspectionModel
-  const prevTargets = state.targets
-  const prevCredentials = state.credentials
+  const previousTarget = state.targets.find((target) => target.credentialId === credentialId && target.model === model)
+  const previousCredential = state.credentials.find((credential) => credential.id === credentialId)
   const nowIso = new Date().toISOString()
 
   useStore.setState((current) => ({
@@ -220,7 +220,7 @@ export async function judgePelicanVerdict(
     targets: current.targets.map((target) => {
       if (target.credentialId !== credentialId || target.model !== model) return target
       const targetRoundId =
-        roundId ?? target.rounds.find((r) => Boolean(r.evidence.pelican?.svg))?.id
+        roundId ?? target.rounds.find((r) => Boolean(r.evidence.pelican?.html || r.evidence.pelican?.svg))?.id
       if (!targetRoundId) return target
       return {
         ...target,
@@ -232,7 +232,7 @@ export async function judgePelicanVerdict(
                 ...r,
                 outcome: verdict,
                 reasonCode: verdict === 'normal' ? 'pelican-judged-normal' : 'pelican-judged-downshift',
-                reason: verdict === 'normal' ? '人工肉眼判定：正常（鹈鹕 SVG 动画）' : '人工肉眼判定：风控（鹈鹕 SVG 动画）',
+                reason: verdict === 'normal' ? '人工肉眼判定：正常（鹈鹕动画）' : '人工肉眼判定：风控（鹈鹕动画）',
                 evidence: {
                   ...r.evidence,
                   pelican: {
@@ -253,6 +253,11 @@ export async function judgePelicanVerdict(
   try {
     const response = await backend.judgeVerdict({ credentialId, model, roundId, verdict })
     if (currentManagementKey() !== requestKey) return false
+    useStore.setState((current) => ({
+      mutationVersion: current.mutationVersion + 1,
+      credentials: current.credentials.map((credential) => credential.id === credentialId
+        ? { ...credential, group: response.appliedGroup } : credential),
+    }))
     await refreshSnapshot(true)
     if (currentManagementKey() !== requestKey) return true
     const latestSettings = useStore.getState().settings
@@ -287,7 +292,13 @@ export async function judgePelicanVerdict(
     return true
   } catch (error) {
     if (currentManagementKey() === requestKey) {
-      useStore.setState({ targets: prevTargets, credentials: prevCredentials })
+      useStore.setState((current) => ({
+        mutationVersion: current.mutationVersion + 1,
+        targets: current.targets.map((target) => previousTarget && target.credentialId === credentialId && target.model === model
+          ? previousTarget : target),
+        credentials: current.credentials.map((credential) => previousCredential && credential.id === credentialId
+          ? { ...credential, group: previousCredential.group } : credential),
+      }))
       void refreshSnapshot(true)
       notifyError('手动判定分组失败', error)
     }

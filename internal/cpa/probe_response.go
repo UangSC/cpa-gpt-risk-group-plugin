@@ -96,8 +96,5 @@ func responseAnswer(response completedResponse) (string, int, int, error) {
 	if strings.TrimSpace(answer) == "" {
 		return "", 0, 0, errors.New("模型没有返回有效文本回答")
 	}
-	if len(answer) > 320<<10 {
-		answer = answer[:320<<10]
-	}
 	return answer, response.Usage.Input, response.Usage.Output, nil
 }

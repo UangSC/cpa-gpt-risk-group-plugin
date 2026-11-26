@@ -90,12 +90,12 @@ export const REASON_LABEL: Record<ReasonCode, string> = {
 export const REASON_DESC: Record<ReasonCode, string> = {
   'all-tests-passed': '本轮所选测试全部通过，未出现需要重试的请求错误。',
   'passed-after-retry': '请求曾出现服务错误或无效回答，但在本轮共用的重试次数内成功；所选测试全部通过。',
-  'candy-mismatch': '糖果题的正确答案应为 21，模型回答中未出现独立的 21。',
+  'candy-mismatch': '模型回答中未出现本轮记录的期望整数，具体判题值见糖果题依据。',
   'fingerprint-anomaly': '三次有效结果中，目标参考未匹配，或目标归因概率未超过本轮阈值。',
   'fingerprint-insufficient': '不足三份有效数字序列，或请求模型尚未登记到参考库，因此本轮保持不确定。',
-  'pelican-awaiting-judgment': '已输出鹈鹕骑自行车 SVG 动画，系统不自动更改分组，请观察动画细节后手动点击分组按钮。',
-  'pelican-judged-normal': '管理员观察鹈鹕骑自行车 SVG 动画后手动归为正常，并按当前分组策略记录或同步。',
-  'pelican-judged-downshift': '管理员观察鹈鹕骑自行车 SVG 动画后手动归为风控，并按当前分组策略记录或同步。',
+  'pelican-awaiting-judgment': '已输出鹈鹕骑自行车 HTML 动画，系统不自动更改分组，请观察动画细节后手动点击分组按钮。',
+  'pelican-judged-normal': '管理员观察鹈鹕骑自行车动画后手动归为正常，并按当前分组策略记录或同步。',
+  'pelican-judged-downshift': '管理员观察鹈鹕骑自行车动画后手动归为风控，并按当前分组策略记录或同步。',
   'repeated-service-errors':
     '502、503、429 混合计入同一类频繁异常。达到单轮请求门槛就停止本轮并归入风控；恢复需要新一轮完整通过。',
   'single-service-error':

@@ -179,6 +179,8 @@ type Candy struct {
 type Pelican struct {
 	PromptID      string `json:"promptId"`
 	Question      string `json:"question"`
+	HTML          string `json:"html,omitempty"`
+	HTMLBytes     int    `json:"htmlBytes,omitempty"`
 	SVG           string `json:"svg,omitempty"`
 	SVGBytes      int    `json:"svgBytes"`
 	SVGPruned     bool   `json:"svgPruned,omitempty"`

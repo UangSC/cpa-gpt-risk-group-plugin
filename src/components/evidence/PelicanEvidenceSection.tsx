@@ -2,9 +2,16 @@ import { useEffect, useState } from 'react'
 import type { Credential, InspectionRound, PelicanEvidence, Target } from '../../types'
 import { useStore } from '../../store/store'
 import { judgePelicanVerdict } from '../../store/actions'
+import { activeInspectionCredentialIds } from '../../store/exclusions'
 import { isManuallyExcluded } from '../../lib/derive'
 import { Chip, Collapse, Icon } from '../ui'
-import { PelicanSvgFrame, formatSvgBytes } from '../pelican/PelicanSvgStage'
+import {
+  PelicanSvgFrame,
+  downloadPelicanHtml,
+  formatSvgBytes,
+  hasPelicanArtwork,
+  pelicanByteCount,
+} from '../pelican/PelicanSvgStage'
 
 export function PelicanEvidenceSection({
   pelican,
@@ -22,32 +29,53 @@ export function PelicanEvidenceSection({
   const connection = useStore((s) => s.connection)
   const judging = useStore((s) => s.judging)
   const tasks = useStore((s) => s.tasks)
-  const [svgCopied, setSvgCopied] = useState(false)
+  const targets = useStore((s) => s.targets)
+  const maskNames = useStore((s) => s.settings.maskNames)
+  const [sourceCopied, setSourceCopied] = useState(false)
 
   useEffect(() => {
-    setSvgCopied(false)
+    setSourceCopied(false)
   }, [target.id, round.id])
+
+  const hasArtwork = hasPelicanArtwork(pelican)
+  const totalBytes = pelicanByteCount(pelican)
+  const sourceCode = pelican.html?.trim() || pelican.svg?.trim() || ''
+  const sourceLabel = pelican.html?.trim() ? 'HTML 源码' : 'SVG 源码'
 
   const judgedVerdict =
     pelican.judgedVerdict ??
     (round.outcome === 'normal' || round.outcome === 'downshift' ? round.outcome : null)
-  const isRunningTarget = tasks.some(
-    (task) => task.status === 'running' && task.items.some((item) => item.targetId === target.id),
-  )
+  const isRunningTarget = activeInspectionCredentialIds({ tasks, targets }).includes(target.credentialId)
   const canJudge =
-    Boolean(pelican.svg || pelican.svgBytes > 0) &&
+    (hasArtwork || totalBytes > 0) &&
     connection === 'connected' &&
     Boolean(credential && !credential.disabled && !isManuallyExcluded(credential)) &&
     !judging.includes(credential?.id ?? '') &&
     !isRunningTarget
 
+  const handleDownload = () => {
+    const ok = downloadPelicanHtml(pelican, {
+      credentialId: target.credentialId,
+      credentialName: credential?.name,
+      finishedAt: round.finishedAt,
+      maskNames,
+    })
+    if (!ok) {
+      useStore.getState().notify({
+        tone: 'warning',
+        title: '下载失败',
+        detail: '当前环境暂不支持触发本地 HTML 下载。',
+      })
+    }
+  }
+
   return (
     <div className="ev-section">
       <h4>
-        画鹈鹕 SVG 动画
+        画鹈鹕 HTML 动画
         {pelican.strictFormat ? (
           <Chip tone="normal">严格格式</Chip>
-        ) : pelican.svg ? (
+        ) : hasArtwork ? (
           <Chip tone="uncertain">宽容提取</Chip>
         ) : (
           <Chip tone="downshift">无效输出</Chip>
@@ -55,26 +83,26 @@ export function PelicanEvidenceSection({
       </h4>
       <dl className="kv">
         <dt>格式说明</dt>
-        <dd>{pelican.strictFormat ? '严格符合 ```svg 规范' : pelican.formatNote}</dd>
+        <dd>{pelican.strictFormat ? '严格符合 ```html 规范' : pelican.formatNote}</dd>
         <dt>人工分组结论</dt>
         <dd>
           {judgedVerdict === 'normal'
             ? '已手动判为正常'
             : judgedVerdict === 'downshift'
               ? '已手动判为风控'
-              : pelican.svg || pelican.svgBytes > 0
+              : hasArtwork || totalBytes > 0
                 ? '待肉眼观察判定'
                 : '无有效画作'}
         </dd>
-        {pelican.svgBytes > 0 && (
+        {totalBytes > 0 && (
           <>
-            <dt>SVG 体积</dt>
-            <dd className="mono">{formatSvgBytes(pelican.svgBytes)}</dd>
+            <dt>文件体积</dt>
+            <dd className="mono">{formatSvgBytes(totalBytes)}</dd>
           </>
         )}
       </dl>
 
-      {pelican.svg ? (
+      {hasArtwork ? (
         <>
           <div
             className="ev-pelican-preview"
@@ -89,13 +117,19 @@ export function PelicanEvidenceSection({
               }
             }}
           >
-            <PelicanSvgFrame svg={pelican.svg} title="本轮鹈鹕动画" lazy={false} />
+            <PelicanSvgFrame html={pelican.html} svg={pelican.svg ?? ''} title="本轮鹈鹕动画" lazy={false} />
           </div>
           <div className="ev-pelican-bar">
-            <button type="button" className="btn btn-sm" onClick={onOpenLightbox}>
-              <Icon.Expand />
-              <span>大图审片</span>
-            </button>
+            <div className="inline" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-sm" onClick={onOpenLightbox}>
+                <Icon.Expand />
+                <span>大图审片</span>
+              </button>
+              <button type="button" className="btn btn-sm" onClick={handleDownload}>
+                <Icon.Download />
+                <span>下载 HTML</span>
+              </button>
+            </div>
             {credential && (
               <div className="pelican-judge-group" role="group" aria-label="人工风控分组">
                 <button
@@ -122,36 +156,46 @@ export function PelicanEvidenceSection({
             )}
           </div>
           <Collapse
-            title="SVG 源码"
-            hint={formatSvgBytes(pelican.svgBytes || pelican.svg.length)}
+            title={sourceLabel}
+            hint={formatSvgBytes(totalBytes)}
             action={
-              <button
-                type="button"
-                className="btn btn-xs btn-ghost"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(pelican.svg!)
-                    setSvgCopied(true)
-                    window.setTimeout(() => setSvgCopied(false), 1600)
-                  } catch {
-                    useStore.getState().notify({
-                      tone: 'warning',
-                      title: '复制失败',
-                      detail: '当前环境未授予剪贴板写入权限。',
-                    })
-                  }
-                }}
-              >
-                {svgCopied ? <Icon.Check /> : <Icon.Copy />}
-                <span>{svgCopied ? '已复制' : '复制'}</span>
-              </button>
+              <span className="inline" style={{ gap: 4 }}>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-ghost"
+                  onClick={handleDownload}
+                >
+                  <Icon.Download />
+                  <span>下载</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-ghost"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(sourceCode)
+                      setSourceCopied(true)
+                      window.setTimeout(() => setSourceCopied(false), 1600)
+                    } catch {
+                      useStore.getState().notify({
+                        tone: 'warning',
+                        title: '复制失败',
+                        detail: '当前环境未授予剪贴板写入权限。',
+                      })
+                    }
+                  }}
+                >
+                  {sourceCopied ? <Icon.Check /> : <Icon.Copy />}
+                  <span>{sourceCopied ? '已复制' : '复制'}</span>
+                </button>
+              </span>
             }
           >
-            <pre className="pelican-code-viewer">{pelican.svg}</pre>
+            <pre className="pelican-code-viewer">{sourceCode}</pre>
           </Collapse>
         </>
       ) : pelican.svgPruned ? (
-        <p className="note">为控制状态文件体积，仅保留最近 3 轮完整 SVG 源码；更早轮次的 SVG 源码已清理。</p>
+        <p className="note">为控制状态文件体积，仅保留最近 3 轮完整动画源码；更早轮次的源码已清理。</p>
       ) : pelican.rawSnippet ? (
         <pre className="answer is-mismatch">{pelican.rawSnippet}</pre>
       ) : null}
