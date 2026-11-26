@@ -17,7 +17,7 @@ func (c *Client) Probe(ctx context.Context, id, model, prompt, instructions, eff
 	if effort != "low" && effort != "medium" && effort != "high" {
 		return ProbeReply{}, errors.New("思考程度仅支持 low、medium、high")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	started := time.Now()
 	reply := ProbeReply{}

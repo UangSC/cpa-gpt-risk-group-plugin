@@ -13,9 +13,9 @@ export function InspectionBatch({ batchId, startedAt, open, onToggle, metadata, 
 }) {
   const contentId = useId()
   return (
-    <section className="inspection-batch" data-inspection-batch={batchId}>
+    <section className="inspection-batch" data-inspection-batch={batchId} data-open={open}>
       <button type="button" className="inspection-batch-toggle" aria-expanded={open} aria-controls={contentId} onClick={onToggle}>
-        <span className="inspection-batch-chevron" aria-hidden="true"><Icon.Chevron dir={open ? 'down' : 'right'} /></span>
+        <span className="inspection-batch-chevron" aria-hidden="true"><Icon.Chevron dir="right" /></span>
         <span className="inspection-batch-heading">
           <time className="inspection-batch-time mono" dateTime={startedAt}>{formatBatchStartedAt(startedAt)}</time>
           <span className="inspection-batch-metadata">{metadata}</span>

@@ -54,6 +54,17 @@ export function isManuallyExcluded(credential: Pick<Credential, 'inspectionExclu
   return Boolean(credential.inspectionExcluded && !credential.disabled)
 }
 
+export function isFreePlan(plan: string | null | undefined): boolean {
+  return (plan ?? '').trim().toLowerCase() === 'free'
+}
+
+export function isFreeSkipped(
+  credential: Pick<Credential, 'plan'>,
+  settings: Pick<Settings, 'inspectFreeAccounts'>,
+): boolean {
+  return isFreePlan(credential.plan) && !settings.inspectFreeAccounts
+}
+
 export function attentionOf(credential: Credential): AttentionItem[] {
   if (credential.disabled) return []
   const items: AttentionItem[] = []
@@ -105,6 +116,7 @@ export function lowestQuota(credential: Credential): number | null {
 
 export function quotaBlockedReason(credential: Credential, settings: Settings): string | null {
   if (credential.disabled) return '凭证已关闭，不参与巡检'
+  if (isFreeSkipped(credential, settings)) return 'Free 账号默认不参与巡检，可在设置中强制开启'
   if (credential.auth === 'expired') return '认证失效，需重新登录'
   if (credential.unavailable) return 'CPA 当前报告凭证暂不可用或正在冷却'
   if (credential.quota.status === 'exhausted') return '额度已用尽'
@@ -167,7 +179,14 @@ export function statusOf(view: CredentialView): StatusKey {
   return 'unknown'
 }
 
-export function sortViews(views: CredentialView[], sort: 'status' | 'recent' | 'quota' | 'name'): CredentialView[] {
+export function sortViews(
+  views: CredentialView[],
+  sort: 'pelican' | 'status' | 'recent' | 'quota' | 'name',
+  settings?: Pick<Settings, 'inspectFreeAccounts'>,
+): CredentialView[] {
+  if (sort === 'pelican') {
+    return sortPelicanViews(views, settings)
+  }
   if (sort === 'status') {
     const rank = { normal: 0, unknown: 1, downshift: 2, error: 3 }
     return views
@@ -187,5 +206,42 @@ export function sortViews(views: CredentialView[], sort: 'status' | 'recent' | '
   return views
     .map((view) => ({ view, key: view.lastCheckedAt ? Date.parse(view.lastCheckedAt) || 0 : 0 }))
     .sort((a, b) => b.key - a.key)
+    .map((entry) => entry.view)
+}
+
+export function sortPelicanViews(
+  views: CredentialView[],
+  settings: Pick<Settings, 'inspectFreeAccounts'> = { inspectFreeAccounts: false },
+): CredentialView[] {
+  return views
+    .map((view) => {
+      const rounds = view.target?.rounds ?? []
+      const svgRound = rounds.find((round) => Boolean(round.evidence.pelican?.svg))
+      const pelicanRound = rounds.find((round) => Boolean(round.evidence.pelican) || round.tests.includes('pelican'))
+      let rank = 3
+      let ts = 0
+      if (svgRound) {
+        const judged =
+          svgRound.evidence.pelican?.judgedVerdict ??
+          (svgRound.outcome === 'normal' || svgRound.outcome === 'downshift' ? svgRound.outcome : null)
+        rank = judged ? 1 : 0
+        ts = Date.parse(svgRound.finishedAt) || 0
+      } else if (pelicanRound) {
+        rank = 2
+        ts = Date.parse(pelicanRound.finishedAt) || 0
+      } else if (
+        view.credential.disabled ||
+        isFreeSkipped(view.credential, settings) ||
+        view.credential.auth === 'expired'
+      ) {
+        rank = 4
+      }
+      return { view, rank, ts }
+    })
+    .sort((a, b) =>
+      a.rank - b.rank ||
+      b.ts - a.ts ||
+      (a.view.credential.id < b.view.credential.id ? -1 : a.view.credential.id > b.view.credential.id ? 1 : 0),
+    )
     .map((entry) => entry.view)
 }

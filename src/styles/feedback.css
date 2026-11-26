@@ -1,0 +1,256 @@
+/* ==========================================================================
+   Feedback: Toast Notifications & HoverCard Tooltips
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- Toasts */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(350px, calc(100vw - 32px));
+}
+
+.toast {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  gap: 9px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid var(--border-strong);
+  border-left-width: 3px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  animation: toast-in 0.2s cubic-bezier(0.22, 1.18, 0.36, 1) both;
+  transition: opacity 0.17s ease, transform 0.17s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateX(18px) scale(0.97);
+  pointer-events: none;
+}
+
+.toast.is-paused .toast-progress {
+  animation-play-state: paused;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.toast-info { border-left-color: var(--accent); }
+.toast-success { border-left-color: var(--normal-dot); }
+.toast-warning { border-left-color: var(--warn-dot); }
+.toast-danger { border-left-color: var(--danger-dot); }
+
+.toast-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: none;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.toast-info .toast-mark { background: var(--accent); }
+.toast-success .toast-mark { background: var(--normal-dot); }
+.toast-warning .toast-mark { background: var(--warn-dot); }
+.toast-danger .toast-mark { background: var(--danger-dot); }
+
+.toast-close {
+  width: 22px;
+  height: 22px;
+  color: var(--text-3);
+}
+
+.toast-close > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.toast-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  opacity: 0.72;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: toast-countdown 4.8s linear forwards;
+  pointer-events: none;
+}
+
+.toast-success .toast-progress { background: var(--normal-dot); }
+.toast-warning .toast-progress { background: var(--warn-dot); }
+.toast-danger .toast-progress { background: var(--danger-dot); }
+
+@keyframes toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.toast-title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.toast-detail {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+
+/* ----------------------------------------------------- HoverCard Tooltips */
+
+.tip {
+  position: fixed;
+  z-index: 120;
+  width: max-content;
+  max-width: 320px;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-2);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  pointer-events: none;
+  animation: tip-pop-top 0.14s cubic-bezier(0.22, 1.18, 0.36, 1);
+}
+
+.tip.is-top { transform-origin: bottom center; }
+.tip.is-bottom {
+  transform-origin: top center;
+  animation-name: tip-pop-bottom;
+}
+
+@keyframes tip-pop-top {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.975);
+  }
+}
+
+@keyframes tip-pop-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.975);
+  }
+}
+
+.tip.is-compact {
+  max-width: 300px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.tip.is-fading {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.tip.is-compact.is-fading {
+  transition-duration: 0.15s;
+}
+
+.tip.is-pinned {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent), var(--shadow-2);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tip.is-selecting-text {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tip.is-pinned,
+.tip.has-hint {
+  pointer-events: auto;
+}
+
+.tip .tip-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.tip .tip-title.tip-title-uncertain { color: var(--warn); }
+.tip .tip-title.tip-title-downshift { color: var(--danger); }
+
+.tip .tip-row {
+  display: flex;
+  gap: 7px;
+}
+
+.tip .tip-k {
+  color: var(--text-3);
+  flex: none;
+}
+
+.tip .tip-v {
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.tip .tip-v.tip-v-danger,
+.tip .tip-v-danger {
+  color: var(--danger);
+  font-weight: 550;
+}
+
+.tip-error-code-row {
+  margin-top: 3px;
+}
+
+.tip-detail-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tip-pin-hint {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--border);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.summary-tip-wrap {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+

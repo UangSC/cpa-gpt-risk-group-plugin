@@ -120,7 +120,24 @@ export function ExclusionDrawer() {
     head={<span className="exclusion-drawer-count">{excluded.length}</span>}>
     <div className="exclusion-drawer-content">
       <div className="exclusion-drawer-policy"><ExclusionIcon /><span>原分类、历史、模型前缀、优先级与权重保持不变。</span></div>
-      <div className="exclusion-drawer-search"><Icon.Search /><input className="input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索不参与巡检的凭证" aria-label="搜索不参与巡检的凭证" /></div>
+      <div className="exclusion-drawer-search">
+        <Icon.Search />
+        <input
+          className="input"
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && search) {
+              event.preventDefault()
+              event.stopPropagation()
+              setSearch('')
+            }
+          }}
+          placeholder="搜索不参与巡检的凭证"
+          aria-label="搜索不参与巡检的凭证"
+        />
+      </div>
       <div className="exclusion-drawer-toolbar">
         <label><input className="checkbox" type="checkbox" checked={allChecked} disabled={!restorable.length} onChange={() => setSelected((current) => allChecked ? current.filter((id) => !restorable.some((view) => view.credential.id === id)) : [...new Set([...current, ...restorable.map((view) => view.credential.id)])])} />全选当前结果</label>
         <span>{search ? `${filtered.length} / ${excluded.length}` : excluded.length} 个凭证</span>

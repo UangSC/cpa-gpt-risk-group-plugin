@@ -7,7 +7,7 @@ export const ENDPOINTS = {
   task: (id: string) => `${ROOT}/tasks?id=${encodeURIComponent(id)}`,
   cancelTask: (id: string) => `${ROOT}/tasks/cancel?id=${encodeURIComponent(id)}`,
   clearHistory: `${ROOT}/history/clear`,
-  sync: `${ROOT}/sync`, settings: `${ROOT}/settings`, routing: `${ROOT}/routing`,
+  sync: `${ROOT}/sync`, verdict: `${ROOT}/verdict`, settings: `${ROOT}/settings`, routing: `${ROOT}/routing`,
   exclusions: `${ROOT}/exclusions`,
   status: `${ROOT}/status`,
   quotaRefresh: `${ROOT}/quota/refresh`,
@@ -53,6 +53,18 @@ export interface StartChecksResponse { taskId: string }
 /** weight 在 CPA 使用加权轮询策略时可单独编辑。 */
 export interface RoutingRequest { credentialId: string; priority?: number; weight?: number; reset?: boolean }
 export interface SyncRequest { credentialId: string }
+export interface ManualVerdictRequest {
+  credentialId: string
+  model: string
+  roundId?: string
+  verdict: 'normal' | 'downshift'
+}
+export interface ManualVerdictResponse {
+  verdict: 'normal' | 'downshift'
+  status: 'synced' | 'not-needed' | 'failed'
+  appliedGroup: 'normal' | 'downshift' | null
+  message: string | null
+}
 export interface ExclusionRequest { credentialIds: string[]; excluded: boolean }
 export interface CredentialStatusRequest { credentialId: string; disabled: boolean }
 export interface QuotaRefreshRequest { credentialIds: string[] }
@@ -66,6 +78,7 @@ export interface Backend {
   cancelTask(id: string): Promise<void>
   clearHistory(): Promise<void>
   sync(request: SyncRequest): Promise<SyncResponse>
+  judgeVerdict(request: ManualVerdictRequest): Promise<ManualVerdictResponse>
   saveSettings(settings: Settings, acknowledgeScheduledConfigChanges?: boolean): Promise<void>
   saveRouting(request: RoutingRequest): Promise<void>
   setExclusions(request: ExclusionRequest): Promise<void>

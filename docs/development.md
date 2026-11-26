@@ -21,7 +21,7 @@ pnpm typecheck
 
 支持 Windows amd64、Linux amd64 和 Linux arm64。在 Linux ARM64 主机上使用 `-Architecture arm64`，也可以省略参数以使用当前 Go 工具链的主机架构。交叉构建时通过 `-Compiler` 指定目标平台的 C 编译器。工具未加入 PATH 时，可通过 `-GoExe`、`-Compiler` 或 `CPA_RISK_GROUP_GO`（兼容 `CPA_DOWNSHIFT_GO`）、`CC` 进程变量指定路径。脚本会：
 
-1. 核对 Go 的插件 ID、注册版本与包配置，执行 TypeScript 检查和 Vite 构建。
+1. 核对 Go 的插件 ID、注册版本、`store/registry.json` 与 `package.json` 配置一致性，执行 TypeScript 检查和 Vite 构建。
 2. 将页面产物准备到 `web/dist/`，供 `go:embed` 使用。
 3. 运行 `go vet` 并生成当前平台的共享库。
 4. 在 `build/<平台>/<架构>/` 写入本地产物和 SHA-256 文件。

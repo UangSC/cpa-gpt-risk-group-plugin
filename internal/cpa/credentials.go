@@ -1,18 +1,24 @@
 package cpa
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
+type credentialIdentity struct {
+	ID    string `json:"id"`
+	Index string `json:"auth_index"`
+}
+
 type hostAuth struct {
-	ID             string    `json:"id"`
-	Index          string    `json:"auth_index"`
+	credentialIdentity
 	Name           string    `json:"name"`
 	Label          string    `json:"label"`
 	Email          string    `json:"email"`
@@ -66,25 +72,31 @@ func (c *Client) ListCredentials(ctx context.Context) ([]Credential, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(list) == 0 {
+		return []Credential{}, nil
+	}
 	// Official auth-files adds the passive quota observations omitted by host.auth.list.
+	type officialAuth struct {
+		hostAuth
+		IDToken json.RawMessage `json:"id_token"`
+	}
 	var official struct {
-		Files []hostAuth `json:"files"`
+		Files []officialAuth `json:"files"`
 	}
 	if err = c.request(ctx, "GET", "/auth-files", nil, &official); err != nil {
 		return nil, err
 	}
-	byID := map[string]hostAuth{}
+	officialByAuth := make(map[credentialIdentity]officialAuth, len(official.Files))
 	for _, a := range official.Files {
-		byID[a.ID] = a
+		officialByAuth[a.credentialIdentity] = a
 	}
+	modelsByAuth := c.registeredModels()
 	out := make([]Credential, 0, len(list))
 	for _, a := range list {
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}
-		if fresh, ok := byID[a.ID]; ok {
-			a = fresh
-		}
+		fresh := officialByAuth[a.credentialIdentity]
 		runtime, runtimeErr := c.runtime(ctx, a.Index, a.ID)
 		if runtimeErr != nil {
 			return nil, runtimeErr
@@ -98,38 +110,39 @@ func (c *Client) ListCredentials(ctx context.Context) ([]Credential, error) {
 			return nil, errors.New("读取 CPA Codex 凭证配置失败")
 		}
 		var fields struct {
-			Prefix   string `json:"prefix"`
-			Priority *int   `json:"priority"`
-			Weight   *int   `json:"weight"`
-			Plan     string `json:"plan_type"`
+			Prefix   string          `json:"prefix"`
+			Priority json.RawMessage `json:"priority"`
+			Weight   json.RawMessage `json:"weight"`
+			Plan     string          `json:"plan_type"`
 		}
 		if json.Unmarshal(stored.JSON, &fields) != nil {
 			return nil, errors.New("CPA Codex 凭证配置格式无效")
 		}
 		priority := a.Priority
-		if fields.Priority != nil {
-			priority = *fields.Priority
+		if value, ok := credentialInteger(fields.Priority); ok {
+			priority = value
 		}
 		weight := 1
-		if fields.Weight != nil {
-			weight = *fields.Weight
+		if value, ok := credentialInteger(fields.Weight); ok {
+			weight = value
 		}
 		if a.Weight != nil {
 			weight = *a.Weight
 		}
-		var models struct {
-			Models []struct {
-				ID string `json:"id"`
-			} `json:"models"`
+		if fresh.Weight != nil {
+			weight = *fresh.Weight
 		}
-		if err = c.request(ctx, "GET", "/auth-files/models?name="+url.QueryEscape(a.ID), nil, &models); err != nil {
-			return nil, err
+		models := modelsByAuth[a.credentialIdentity]
+		if models == nil {
+			models, err = c.legacyRegisteredModels(ctx, a.ID)
+			if err != nil {
+				return nil, err
+			}
 		}
-		ids := []string{}
-		seen := map[string]bool{}
-		prefix := strings.Trim(fields.Prefix, "/")
-		for _, m := range models.Models {
-			model := m.ID
+		ids := make([]string, 0, len(models))
+		seen := make(map[string]bool, len(models))
+		prefix := strings.Trim(strings.TrimSpace(fields.Prefix), "/")
+		for _, model := range models {
 			if prefix != "" {
 				model = strings.TrimPrefix(model, prefix+"/")
 			}
@@ -139,27 +152,93 @@ func (c *Client) ListCredentials(ctx context.Context) ([]Credential, error) {
 			}
 		}
 		sort.Strings(ids)
-		name := a.Email
-		if name == "" {
-			name = a.Label
-		}
-		if name == "" {
-			name = a.Name
-		}
-		plan := a.AccountType
-		if fields.Plan != "" {
-			plan = fields.Plan
-		}
+		file := cmp.Or(a.Name, fresh.Name)
+		name := cmp.Or(a.Email, fresh.Email, a.Label, fresh.Label, file)
+		plan := strings.TrimSpace(fields.Plan)
 		if plan == "" {
-			plan = "unknown"
+			var claims struct {
+				Plan string `json:"plan_type"`
+			}
+			if json.Unmarshal(fresh.IDToken, &claims) == nil {
+				plan = strings.TrimSpace(claims.Plan)
+			}
 		}
+		plan = cmp.Or(plan, a.AccountType, fresh.AccountType, "unknown")
 		auth := "valid"
 		if strings.EqualFold(strings.TrimSpace(a.StatusMessage), "token expired") {
 			auth = "expired"
 		}
-		out = append(out, Credential{ID: a.ID, AuthIndex: a.Index, Name: name, File: a.Name, Plan: plan, Prefix: prefix, Priority: priority, Weight: weight, Disabled: a.Disabled, Unavailable: a.Unavailable, Auth: auth, Availability: "unknown", Models: ids, Quota: c.currentQuota(a.ID, parseQuotaSignals(a.Quota.Signals, a.Quota.ObservedAt))})
+		if fresh.Quota.Signals != nil {
+			a.Quota = fresh.Quota
+		}
+		out = append(out, Credential{
+			ID: a.ID, AuthIndex: a.Index, Name: name, File: file, Plan: plan,
+			Prefix: prefix, Priority: priority, Weight: max(0, weight),
+			Disabled: a.Disabled, Unavailable: a.Unavailable, Auth: auth, Availability: "unknown",
+			Models: ids, Quota: c.currentQuota(a.ID, parseQuotaSignals(a.Quota.Signals, a.Quota.ObservedAt)),
+		})
 	}
 	return out, nil
+}
+
+func (c *Client) registeredModels() map[credentialIdentity][]string {
+	var reply struct {
+		Credentials []struct {
+			credentialIdentity
+			Models []string `json:"models"`
+		} `json:"credentials"`
+	}
+	if c.host("host.auth.models", struct{}{}, &reply) != nil {
+		return nil
+	}
+	models := make(map[credentialIdentity][]string, len(reply.Credentials))
+	for _, entry := range reply.Credentials {
+		identity := entry.credentialIdentity
+		if _, duplicate := models[identity]; duplicate {
+			models[identity] = nil
+			continue
+		}
+		models[identity] = entry.Models
+	}
+	return models
+}
+
+func (c *Client) legacyRegisteredModels(ctx context.Context, id string) ([]string, error) {
+	var reply struct {
+		Models []struct {
+			ID string `json:"id"`
+		} `json:"models"`
+	}
+	if err := c.request(ctx, "GET", "/auth-files/models?name="+url.QueryEscape(id), nil, &reply); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(reply.Models))
+	for _, model := range reply.Models {
+		models = append(models, model.ID)
+	}
+	return models, nil
+}
+
+// CPA accepts integer values and quoted integers in stored credential metadata.
+func credentialInteger(raw json.RawMessage) (int, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	if raw[0] == '"' {
+		var text string
+		if json.Unmarshal(raw, &text) != nil {
+			return 0, false
+		}
+		value, err := strconv.Atoi(strings.TrimSpace(text))
+		return value, err == nil
+	}
+	value, err := strconv.Atoi(string(raw))
+	if err == nil {
+		return value, true
+	}
+	number, err := strconv.ParseFloat(string(raw), 64)
+	value = int(number)
+	return value, err == nil && float64(value) == number
 }
 
 func (c *Client) runtime(ctx context.Context, index, id string) (hostAuth, error) {

@@ -2,9 +2,23 @@ package classifier
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
+
+const defaultFingerprintThresholdPercent = 90.0
+
+func (s Settings) fingerprintThreshold() float64 {
+	if s.FingerprintThresholdPercent == nil {
+		return defaultFingerprintThresholdPercent / 100
+	}
+	return *s.FingerprintThresholdPercent / 100
+}
+
+func fingerprintThresholdLabel(threshold float64) string {
+	return fmt.Sprintf("%g%%", math.Round(threshold*10000)/100)
+}
 
 func applyFingerprintResult(round *Round, result fingerprint.Result, retried bool) {
 	evidence := round.Evidence.Fingerprint
@@ -27,7 +41,7 @@ func applyFingerprintResult(round *Round, result fingerprint.Result, retried boo
 		return
 	}
 	probability := *result.RequestedProbability
-	if probability > fingerprint.ConfidenceThreshold && result.ReferenceMatched {
+	if probability > evidence.Threshold && result.ReferenceMatched {
 		evidence.Consistency = "consistent"
 		round.Outcome, round.ReasonCode = "normal", "all-tests-passed"
 		matchedModel := result.ClosestModel
@@ -43,12 +57,11 @@ func applyFingerprintResult(round *Round, result fingerprint.Result, retried boo
 	evidence.Consistency = "anomalous"
 	round.Outcome, round.ReasonCode = "downshift", "fingerprint-anomaly"
 	if result.ClosestModel != "" && result.Probability != nil {
-		if result.ReferenceMatched {
-			round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s（未高于 90%%）", (*result.Probability)*100, result.ClosestModel)
-		} else {
-			round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s", (*result.Probability)*100, result.ClosestModel)
-		}
+		round.Reason = fmt.Sprintf("模型指纹 %.2f%% 概率匹配 %s", (*result.Probability)*100, result.ClosestModel)
 	} else {
-		round.Reason = fmt.Sprintf("模型指纹归因 %.2f%%（未高于 90%%）", probability*100)
+		round.Reason = fmt.Sprintf("模型指纹归因 %.2f%%", probability*100)
+	}
+	if result.ReferenceMatched {
+		round.Reason += "（未高于 " + fingerprintThresholdLabel(evidence.Threshold) + "）"
 	}
 }

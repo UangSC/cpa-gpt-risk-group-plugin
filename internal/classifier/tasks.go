@@ -21,8 +21,8 @@ type StartRequest struct {
 }
 
 func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
-	if q.Method != "candy" && q.Method != "fingerprint" {
-		return "", bad("检测方式仅支持糖果题或模型指纹")
+	if q.Method != "candy" && q.Method != "fingerprint" && q.Method != "pelican" {
+		return "", bad("检测方式仅支持糖果题、模型指纹或画鹈鹕")
 	}
 	if q.Method == "fingerprint" && !fingerprint.Available() {
 		return "", bad("模型指纹参考库暂不可用")
@@ -34,7 +34,8 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 	if q.Scope != "manual" && q.Scope != "batch" && q.Scope != "scheduled" {
 		return "", bad("检测范围无效")
 	}
-	if q.Scope != "scheduled" && !q.AcknowledgeConfigChanges {
+	scheduled := q.Scope == "scheduled"
+	if !scheduled && !q.AcknowledgeConfigChanges {
 		return "", &apiError{409, "请先确认本次巡检配置"}
 	}
 	s.mutation.Lock()
@@ -66,29 +67,46 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 	sortCredentials(candidates)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if q.Scope != "scheduled" && (q.ConfigChangesMode != s.state.Settings.Routing.Mode || q.ConfigChangesRevision != configurationFingerprint(s.state.Settings, false)) {
+	settings := s.state.Settings
+	revision := configurationFingerprint(settings, scheduled)
+	if !scheduled && (q.ConfigChangesMode != settings.Routing.Mode || q.ConfigChangesRevision != revision) {
 		return "", &apiError{409, "巡检或分组配置已变化，请重新确认巡检会修改的配置"}
 	}
-	if q.Method != s.state.Settings.InspectionMethod {
+	if q.Method != settings.InspectionMethod {
 		return "", &apiError{409, "检测方式与当前已保存设置不一致，请保存后重新确认巡检"}
 	}
-	if q.Scope == "scheduled" && (!s.state.Settings.Schedule.Enabled || !s.state.ScheduledConfigChangesAcknowledged || s.state.ScheduledConfigurationFingerprint != configurationFingerprint(s.state.Settings, true)) {
+	if q.Model != strings.TrimSpace(settings.InspectionModel) {
+		return "", &apiError{409, "检测模型与当前已保存设置不一致，请保存后重新确认巡检"}
+	}
+	if scheduled && (!settings.Schedule.Enabled || !s.state.ScheduledConfigChangesAcknowledged || s.state.ScheduledConfigurationFingerprint != revision) {
 		return "", &apiError{409, "定时巡检未获得当前配置的修改授权"}
 	}
 	participating := candidates[:0]
+	skippedFree := false
+	skippedOther := false
 	for _, c := range candidates {
-		if !excludedFromInspection(c, s.state.Records[c.ID]) {
+		record := s.state.Records[c.ID]
+		if !excludedFromInspection(c, record, settings) {
 			participating = append(participating, c)
+			continue
+		}
+		if !c.Disabled && (record == nil || !record.InspectionExcluded) && isFreePlan(c.Plan) && !settings.InspectFreeAccounts {
+			skippedFree = true
+		} else {
+			skippedOther = true
 		}
 	}
 	candidates = participating
 	if len(candidates) == 0 {
-		return "", &apiError{409, "所选凭证均不参与巡检，请检查 CPA 停用状态或恢复参与"}
+		if skippedFree && !skippedOther {
+			return "", &apiError{409, "Free 账号默认不参与巡检，可在「设置 → 巡检与重试」中开启强制巡检 Free 账号"}
+		}
+		return "", &apiError{409, "所选凭证均不参与巡检，请检查 CPA 停用状态、Free 账号策略或恢复参与"}
 	}
 	if s.ctx.Err() != nil {
 		return "", &apiError{409, "插件正在停止"}
 	}
-	task := Task{ID: identifier("task"), Scope: q.Scope, Label: "Codex 凭证巡检", Method: q.Method, CreatedAt: stamp(), Status: "running", Items: []RunItem{}, Concurrency: s.state.Settings.Concurrency.MaxObjects}
+	task := Task{ID: identifier("task"), Scope: q.Scope, Label: "Codex 凭证巡检", Method: q.Method, CreatedAt: stamp(), Status: "running", Items: []RunItem{}, Concurrency: settings.Concurrency.MaxObjects}
 	var queue *inspectionQueue
 	existingIndex := -1
 	seen := make(map[string]bool)
@@ -99,6 +117,10 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 		queue = s.tasks[active.ID]
 		if queue == nil || queue.ctx.Err() != nil {
 			return "", &apiError{409, "当前巡检正在收尾"}
+		}
+		// 定时巡检使用独立的额度与会话策略，手动和批量巡检可以共用队列。
+		if (active.Scope == "scheduled") != scheduled || configurationFingerprint(queue.settings, scheduled) != revision {
+			return "", &apiError{409, "当前巡检使用不同的执行策略或配置，请等待任务结束后再启动"}
 		}
 		task = active
 		task.Items = append([]RunItem(nil), active.Items...)
@@ -140,7 +162,7 @@ func (s *Service) Start(ctx context.Context, q StartRequest) (string, error) {
 	}
 	if queue == nil {
 		taskCtx, cancel := context.WithCancel(s.ctx)
-		queue = &inspectionQueue{ctx: taskCtx, cancel: cancel, settings: clone(s.state.Settings)}
+		queue = &inspectionQueue{ctx: taskCtx, cancel: cancel, settings: clone(settings)}
 		s.tasks[task.ID] = queue
 	}
 	queue.jobs = append(queue.jobs, newJobs...)

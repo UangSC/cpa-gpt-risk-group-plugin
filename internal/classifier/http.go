@@ -110,6 +110,12 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			result, err = s.Resync(r.Context(), q.CredentialID)
 		}
+	case path == "/verdict" && r.Method == "POST":
+		var q ManualVerdictRequest
+		err = decode(w, r, &q)
+		if err == nil {
+			result, err = s.JudgePelican(r.Context(), q)
+		}
 	case path == "/tasks" && r.Method == "GET":
 		result, err = s.getTask(r.URL.Query().Get("id"))
 	case path == "/tasks/cancel" && r.Method == "POST":

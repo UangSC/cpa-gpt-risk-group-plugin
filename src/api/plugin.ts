@@ -1,5 +1,5 @@
 import type { InspectionTask, Settings } from '../types'
-import { ENDPOINTS, type Backend, type Snapshot, type StartChecksRequest, type StartChecksResponse, type SyncRequest, type SyncResponse, type RoutingRequest, type ExclusionRequest, type CredentialStatusRequest, type QuotaRefreshRequest, type QuotaRefreshResponse } from './contract'
+import { ENDPOINTS, type Backend, type Snapshot, type StartChecksRequest, type StartChecksResponse, type SyncRequest, type SyncResponse, type ManualVerdictRequest, type ManualVerdictResponse, type RoutingRequest, type ExclusionRequest, type CredentialStatusRequest, type QuotaRefreshRequest, type QuotaRefreshResponse } from './contract'
 import { currentManagementKey } from './auth'
 
 declare global {
@@ -44,6 +44,7 @@ export function createPluginBackend(): Backend {
     cancelTask: async (id: string) => { await request(ENDPOINTS.cancelTask(id), { method: 'POST' }) },
     clearHistory: async () => { await request(ENDPOINTS.clearHistory, { method: 'POST', body: JSON.stringify({ confirm: true }) }) },
     sync: (body: SyncRequest) => request<SyncResponse>(ENDPOINTS.sync, { method: 'POST', body: JSON.stringify(body) }),
+    judgeVerdict: (body: ManualVerdictRequest) => request<ManualVerdictResponse>(ENDPOINTS.verdict, { method: 'POST', body: JSON.stringify(body) }),
     saveSettings: async (body: Settings, acknowledgeScheduledConfigChanges = false) => { await request(ENDPOINTS.settings, { method: 'PUT', body: JSON.stringify({ ...body, ...(acknowledgeScheduledConfigChanges ? { acknowledgeScheduledConfigChanges: true } : {}) }) }) },
     setExclusions: async (body: ExclusionRequest) => { await request(ENDPOINTS.exclusions, { method: 'POST', body: JSON.stringify(body) }) },
     setCredentialStatus: async (body: CredentialStatusRequest) => { await request(ENDPOINTS.status, { method: 'PUT', body: JSON.stringify(body) }) },

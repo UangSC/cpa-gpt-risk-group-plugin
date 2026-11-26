@@ -4,8 +4,8 @@ import { type CredentialView } from '../../lib/derive'
 import { Chip, HoverCard, PlanMark, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { ActivityRail, type CredentialRuntime, StatusPill, GroupCell, QuotaCell, Actions, resolveCardActivity, stop } from './CredentialParts'
-import { CardNote, SelectableCard, cardNote } from './SelectableCard'
+import { ActivityRail, type CredentialRuntime, FreeSkipChip, StatusPill, GroupCell, QuotaCell, StateChips, Actions, resolveCardActivity, stop } from './CredentialParts'
+import { CardNote, CardNoteTooltip, SelectableCard, cardNoteTone } from './SelectableCard'
 
 export function CredentialGrid({
   views,
@@ -24,21 +24,15 @@ export function CredentialGrid({
         const selected = !isDisabled && selection.has(view.credential.id)
         const activity = !isDisabled ? resolveCardActivity(view.credential.id, runtime) : null
         const quotaRefreshing = !isDisabled && runtime.quotaRefreshingIds.has(view.credential.id)
-        const noteText = cardNote(view)
-        const reasonClass = !isDisabled && view.verdict === 'downshift'
-          ? 'is-downshift'
-          : !isDisabled && view.attention.length > 0 && !view.reason
-            ? 'is-attention'
-            : !isDisabled && view.verdict === 'normal' && view.attention.length === 0
-              ? 'is-calm'
-              : ''
+        const noteTone = cardNoteTone(view, isDisabled)
+        const reasonClass = noteTone === 'error' ? 'is-error' : noteTone === 'calm' ? 'is-calm' : ''
         return (
           <SelectableCard
             key={view.credential.id}
             credentialId={view.credential.id}
             selected={selected}
             disabled={isDisabled}
-            onToggle={() => selection.toggle(view.credential.id)}
+            onToggle={(shiftKey) => selection.toggle(view.credential.id, shiftKey)}
             className={`cred-tile tone-${view.verdict}${activity ? ` is-active is-${activity.kind}` : ''}`}
             testId={`cred-${view.credential.id}`}
           >
@@ -49,10 +43,11 @@ export function CredentialGrid({
                 className="checkbox"
                 checked={selected}
                 disabled={isDisabled}
-                onChange={() => {
-                  if (!isDisabled) selection.toggle(view.credential.id)
+                onChange={() => {}}
+                onClick={(event) => {
+                  stop(event)
+                  if (!isDisabled) selection.toggle(view.credential.id, event.shiftKey)
                 }}
-                onClick={stop}
                 aria-label={isDisabled ? '已关闭的凭证无法勾选' : '选择凭证'}
               />
               <PlanMark plan={view.credential.plan} size="sm" />
@@ -60,12 +55,13 @@ export function CredentialGrid({
                 <div className="tile-name-line">
                   <SecretName name={view.credential.name} className="tile-name" />
                   {isDisabled && <Chip tone="plain">已关闭</Chip>}
+                  <FreeSkipChip view={view} settings={runtime.settings} />
                   {activity && (
                     <Chip tone={activity.chipTone} dot>
                       {activity.label}
                     </Chip>
                   )}
-                  {!isDisabled && view.credential.auth === 'expired' && <Chip tone="downshift">认证失效</Chip>}
+                  {!isDisabled && <StateChips view={view} />}
                 </div>
                 <div className="tile-sub">
                   <span className="mono secret-name">{view.credential.file}</span>
@@ -91,15 +87,19 @@ export function CredentialGrid({
 
             <QuotaCell view={view} settings={runtime.settings} refreshUnknown={!isDisabled} refreshing={quotaRefreshing} />
 
-            <HoverCard compact wrapperClassName="summary-tip-wrap" content={noteText}>
+            <HoverCard
+              compact
+              wrapperClassName="summary-tip-wrap"
+              content={<CardNoteTooltip view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />}
+            >
               <div className={`tile-reason ${reasonClass}`}>
-                <CardNote view={view} />
+                <CardNote view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />
               </div>
             </HoverCard>
 
             <div className="tile-foot">
               <StatusPill view={view} size="sm" />
-              <Actions view={view} runtime={runtime} mode="card" />
+              <Actions view={view} runtime={runtime} mode="card" showQuickRun />
             </div>
           </SelectableCard>
         )

@@ -15,6 +15,9 @@ func quotaReason(c cpa.Credential, v Settings, scope string) string {
 	if c.Disabled || c.Auth == "expired" {
 		return "凭证被禁用或认证失效"
 	}
+	if isFreePlan(c.Plan) && !v.InspectFreeAccounts {
+		return "Free 账号默认不参与巡检，可在设置中开启强制巡检"
+	}
 	if c.Unavailable {
 		return "CPA 当前报告此凭证不可用或处于冷却，按真实状态跳过"
 	}
@@ -162,9 +165,9 @@ func (s *Service) inspect(ctx context.Context, cancel context.CancelFunc, task T
 		return
 	}
 	s.patchItem(task.ID, tid, func(i *RunItem) { i.State = "running"; i.StartedAt = &start; i.CurrentTest = &q.Method; i.Note = nil })
-	round := newInspectionRound(task, q, tid, start, v.ReasoningEffort)
+	round := newInspectionRound(task, q, tid, start, v)
 	codes := s.executeRound(ctx, cancel, task, q, c, v, connectionFailures, &round)
-	if ctx.Err() == nil && len(codes) > 0 {
+	if ctx.Err() == nil && len(codes) > 0 && resolveMethodSpec(q.Method).countsTransientServiceError {
 		s.mu.Lock()
 		previous := s.recordLocked(c.ID).Targets[q.Model].Rounds
 		s.mu.Unlock()
@@ -228,6 +231,7 @@ func (s *Service) commitRound(ctx context.Context, task Task, q StartRequest, c 
 	if len(target.Rounds) > 40 {
 		target.Rounds = target.Rounds[:40]
 	}
+	pruneTargetPelicanSVGs(target.Rounds)
 	r.Targets[q.Model] = target
 	var currentItem *RunItem
 	for i := range s.state.Tasks {

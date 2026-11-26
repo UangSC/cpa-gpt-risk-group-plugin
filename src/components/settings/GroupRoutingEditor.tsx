@@ -1,9 +1,9 @@
-import type { RoutingGroup } from '../types'
-import { useStore } from '../store/store'
-import { useSettingsEditor } from '../store/settingsEditor'
-import { RoutingControls } from './RoutingControls'
+import type { RoutingGroup } from '../../types'
+import { useStore } from '../../store/store'
+import { useSettingsEditor } from '../../store/settingsEditor'
+import { RoutingControls } from '../RoutingControls'
 import { SettingsPanel } from './SettingsPanel'
-import { Icon } from './ui'
+import { Icon } from '../ui'
 
 const GROUPS: { key: RoutingGroup; label: string; desc: string }[] = [
   { key: 'normal', label: '正常组', desc: '已写入正常分组的凭证' },

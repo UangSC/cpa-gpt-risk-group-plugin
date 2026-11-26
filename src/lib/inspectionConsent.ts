@@ -13,6 +13,8 @@ export function inspectionRisk(settings: Settings) {
     reasoningEffort: settings.reasoningEffort,
     headerOverrides: settings.headerOverrides ?? {},
     inspectionMethod: settings.inspectionMethod,
+    ...(settings.inspectFreeAccounts ? { inspectFreeAccounts: true } : {}),
+    ...(settings.inspectionMethod === 'fingerprint' ? { fingerprintThresholdPercent: settings.fingerprintThresholdPercent } : {}),
     retry: settings.retry, failureRule: settings.failureRule, quota: settings.quota,
     concurrency: settings.concurrency,
     schedule: { ...settings.schedule, nextRunAt: null },

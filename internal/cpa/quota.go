@@ -2,10 +2,90 @@ package cpa
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+const (
+	fiveHourWindowSeconds = int64(5 * 3600)
+	sevenDayWindowSeconds = int64(7 * 86400)
+	minMonthWindowSeconds = int64(28 * 86400)
+	maxMonthWindowSeconds = int64(31 * 86400)
+
+	fiveHourWindowMinutes = 300
+	sevenDayWindowMinutes = 10080
+	minMonthWindowMinutes = 28 * 1440
+	maxMonthWindowMinutes = 31 * 1440
+)
+
+func quotaWindowKeyFromSeconds(seconds int64) string {
+	switch {
+	case seconds == fiveHourWindowSeconds:
+		return "5h"
+	case seconds == sevenDayWindowSeconds:
+		return "7d"
+	case seconds >= minMonthWindowSeconds && seconds <= maxMonthWindowSeconds:
+		return "30d"
+	default:
+		return ""
+	}
+}
+
+func quotaWindowKeyFromMinutes(minutes int) string {
+	switch {
+	case minutes == fiveHourWindowMinutes:
+		return "5h"
+	case minutes == sevenDayWindowMinutes:
+		return "7d"
+	case minutes >= minMonthWindowMinutes && minutes <= maxMonthWindowMinutes:
+		return "30d"
+	default:
+		return ""
+	}
+}
+
+func isValidQuotaWindowKey(key string) bool {
+	return key == "5h" || key == "7d" || key == "30d"
+}
+
+func quotaWindowOrder(key string) int {
+	switch key {
+	case "5h":
+		return 0
+	case "7d":
+		return 1
+	case "30d":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func sortAndDedupeQuotaWindows(windows []QuotaWindow) []QuotaWindow {
+	if len(windows) == 0 {
+		return []QuotaWindow{}
+	}
+	latest := make(map[string]QuotaWindow, len(windows))
+	for _, w := range windows {
+		if !isValidQuotaWindowKey(w.Key) {
+			continue
+		}
+		latest[w.Key] = w
+	}
+	if len(latest) == 0 {
+		return []QuotaWindow{}
+	}
+	out := make([]QuotaWindow, 0, len(latest))
+	for _, w := range latest {
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return quotaWindowOrder(out[i].Key) < quotaWindowOrder(out[j].Key)
+	})
+	return out
+}
 
 func parseQuotaSignals(signals map[string]string, observed time.Time) Quota {
 	q := Quota{Windows: []QuotaWindow{}, Status: "unknown"}
@@ -26,13 +106,7 @@ func parseQuotaSignals(signals map[string]string, observed time.Time) Quota {
 		if err != nil {
 			continue
 		}
-		key := ""
-		if minutes == 300 {
-			key = "5h"
-		}
-		if minutes == 10080 {
-			key = "7d"
-		}
+		key := quotaWindowKeyFromMinutes(minutes)
 		if key == "" {
 			continue
 		}
@@ -56,9 +130,11 @@ func parseQuotaSignals(signals map[string]string, observed time.Time) Quota {
 		at := reset.UTC().Format(time.RFC3339)
 		q.Windows = append(q.Windows, QuotaWindow{Key: key, RemainingPercent: &remaining, ResetsAt: &at})
 		q.Status = "known"
-		if remaining == 0 {
-			q.Status = "exhausted"
-		}
+	}
+	q.Windows = sortAndDedupeQuotaWindows(q.Windows)
+	if len(q.Windows) == 0 {
+		q.Status = "unknown"
+		return q
 	}
 	for _, w := range q.Windows {
 		if w.RemainingPercent != nil && *w.RemainingPercent == 0 {

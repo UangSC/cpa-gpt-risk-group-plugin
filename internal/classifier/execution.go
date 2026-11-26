@@ -12,12 +12,29 @@ import (
 	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/fingerprint"
 )
 
-func newInspectionRound(task Task, q StartRequest, targetID, startedAt, effort string) Round {
-	round := Round{ID: identifier("round"), TaskID: task.ID, BatchStartedAt: task.CreatedAt, TargetID: targetID, StartedAt: startedAt, Scope: q.Scope, Tests: []string{q.Method}, Outcome: "uncertain", ReasonCode: "no-model-response", Reason: "未取得有效回答", ReasoningEffort: effort, Evidence: Evidence{Tests: []string{q.Method}, Attempts: []Attempt{}, Errors: []EvidenceError{}, Usage: &Usage{}}}
-	if q.Method == "fingerprint" {
-		round.ReasonCode = "fingerprint-insufficient"
-		round.Reason = "尚未取得三次有效数字回答，不能计算模型指纹概率"
-		round.Evidence.Fingerprint = &Fingerprint{ChallengeCount: fingerprint.ChallengeCount, Consistency: "insufficient", Samples: []FingerprintSample{}, Threshold: fingerprint.ConfidenceThreshold, Candidates: []fingerprint.Candidate{}, ReferenceBank: fingerprint.ReferenceInfo(), Decision: "partial"}
+func newInspectionRound(task Task, q StartRequest, targetID, startedAt string, settings Settings) Round {
+	spec := resolveMethodSpec(q.Method)
+	round := Round{
+		ID:              identifier("round"),
+		TaskID:          task.ID,
+		BatchStartedAt:  task.CreatedAt,
+		TargetID:        targetID,
+		StartedAt:       startedAt,
+		Scope:           q.Scope,
+		Tests:           []string{q.Method},
+		Outcome:         "uncertain",
+		ReasonCode:      spec.defaultReasonCode,
+		Reason:          spec.missingReason,
+		ReasoningEffort: settings.ReasoningEffort,
+		Evidence: Evidence{
+			Tests:    []string{q.Method},
+			Attempts: []Attempt{},
+			Errors:   []EvidenceError{},
+			Usage:    &Usage{},
+		},
+	}
+	if spec.initRound != nil {
+		spec.initRound(&round, settings)
 	}
 	return round
 }
@@ -25,13 +42,11 @@ func newInspectionRound(task Task, q StartRequest, targetID, startedAt, effort s
 // executeRound shares one extra-retry budget across all challenges. Successful
 // challenges are never replayed, and attribution runs once after three valid samples.
 func (s *Service) executeRound(ctx context.Context, cancel context.CancelFunc, task Task, q StartRequest, c cpa.Credential, settings Settings, connectionFailures *atomic.Int32, round *Round) []int {
-	challenges := []fingerprint.Challenge{{ID: "candy-bag-21", Question: CandyQuestion, Instructions: cpa.DefaultProbeInstructions}}
-	if q.Method == "fingerprint" {
-		challenges = fingerprint.Challenges()
-		if len(challenges) != fingerprint.ChallengeCount {
-			round.Reason = "模型指纹参考库不可用，未发起检测"
-			return nil
-		}
+	spec := resolveMethodSpec(q.Method)
+	challenges, unavailableReason := spec.challenges()
+	if unavailableReason != "" {
+		round.Reason = unavailableReason
+		return nil
 	}
 	var codes []int
 	var samples [][]int
@@ -71,11 +86,7 @@ challengeLoop:
 				item.State = "running"
 				item.Attempt = requests
 				item.RetryAt = nil
-				if q.Method == "fingerprint" {
-					item.Note = str(fmt.Sprintf("模型指纹第 %d/%d 次采样", challengeIndex+1, fingerprint.ChallengeCount))
-				} else {
-					item.Note = nil
-				}
+				item.Note = spec.runningNote(challengeIndex)
 			})
 			at, requestStart := stamp(), time.Now()
 			reply, err := s.adapter.Probe(ctx, c.ID, q.Model, challenge.Question, challenge.Instructions, settings.ReasoningEffort, settings.HeaderOverrides)
@@ -86,6 +97,9 @@ challengeLoop:
 			status := any(reply.Status)
 			valid := err == nil && reply.Status >= 200 && reply.Status < 300 && strings.TrimSpace(reply.Answer) != ""
 			var numbers []int
+			var pelicanSVG string
+			var pelicanStrict bool
+			var pelicanFormatNote string
 			var sampleError error
 			if valid && q.Method == "fingerprint" {
 				numbers, sampleError = fingerprint.ParseSample(reply.Answer, challenge.ExpectedCount)
@@ -93,7 +107,27 @@ challengeLoop:
 				if numbers == nil {
 					numbers = []int{}
 				}
-				round.Evidence.Fingerprint.Samples = append(round.Evidence.Fingerprint.Samples, FingerprintSample{ChallengeID: challenge.ID, PromptSummary: fmt.Sprintf("数字挑战 %s · 预期 %d 个整数", challenge.ID, challenge.ExpectedCount), Question: challenge.Question, Instructions: challenge.Instructions, ExpectedCount: challenge.ExpectedCount, Numbers: numbers, Accepted: valid, Sample: truncateAnswer(reply.Answer)})
+				round.Evidence.Fingerprint.Samples = append(round.Evidence.Fingerprint.Samples, FingerprintSample{
+					ChallengeID:   challenge.ID,
+					PromptSummary: fmt.Sprintf("数字挑战 %s · 预期 %d 个整数", challenge.ID, challenge.ExpectedCount),
+					Question:      challenge.Question,
+					Instructions:  challenge.Instructions,
+					ExpectedCount: challenge.ExpectedCount,
+					Numbers:       numbers,
+					Accepted:      valid,
+					Sample:        truncateAnswer(reply.Answer),
+				})
+			} else if valid && q.Method == "pelican" {
+				pelicanSVG, pelicanStrict, pelicanFormatNote, sampleError = ExtractPelicanSVG(reply.Answer)
+				valid = sampleError == nil
+				if !valid {
+					round.Evidence.Pelican = &Pelican{
+						PromptID:   "pelican-bicycle-svg",
+						Question:   PelicanQuestion,
+						RawSnippet: truncatePelicanSnippet(reply.Answer),
+						FormatNote: sampleError.Error(),
+					}
+				}
 			}
 			if err != nil {
 				status = "network-error"
@@ -105,7 +139,19 @@ challengeLoop:
 			if duration == 0 {
 				duration = time.Since(requestStart).Milliseconds()
 			}
-			round.Evidence.Attempts = append(round.Evidence.Attempts, Attempt{Index: requests, Status: status, At: at, WaitMs: delay, DurationMs: duration, Test: q.Method, ChallengeIndex: challengeIndex + 1, RetryIndex: retries, ValidResponse: valid, FinishedAt: finishedAt, LocalState: reply.LocalState})
+			round.Evidence.Attempts = append(round.Evidence.Attempts, Attempt{
+				Index:          requests,
+				Status:         status,
+				At:             at,
+				WaitMs:         delay,
+				DurationMs:     duration,
+				Test:           q.Method,
+				ChallengeIndex: challengeIndex + 1,
+				RetryIndex:     retries,
+				ValidResponse:  valid,
+				FinishedAt:     finishedAt,
+				LocalState:     reply.LocalState,
+			})
 			s.patchItem(task.ID, round.TargetID, func(item *RunItem) { item.LastStatus = status })
 			round.Evidence.Usage.InputTokens += reply.InputTokens
 			round.Evidence.Usage.OutputTokens += reply.OutputTokens
@@ -130,7 +176,7 @@ challengeLoop:
 				break challengeLoop
 			}
 			if err == nil && (reply.Status == 401 || reply.Status == 403) {
-				round.Outcome, round.ReasonCode, round.Reason = "blocked", "auth-expired", "凭证认证失效，未形成能力判定"
+				round.Outcome, round.ReasonCode, round.Reason = "blocked", "auth-expired", fmt.Sprintf("凭证认证失效（HTTP %d），未形成能力判定", reply.Status)
 				break challengeLoop
 			}
 			if err == nil && reply.LocalState && reply.Status == 429 {
@@ -143,13 +189,14 @@ challengeLoop:
 			}
 			if err == nil && !reply.LocalState && isTransientHTTPStatus(reply.Status) {
 				codes = append(codes, reply.Status)
-				if len(codes) >= settings.FailureRule.RequestThreshold {
+				if spec.countsTransientServiceError && len(codes) >= settings.FailureRule.RequestThreshold {
 					markFrequentServiceErrors(round, codes, settings)
 					break challengeLoop
 				}
 			}
 			if valid {
-				if q.Method == "candy" {
+				switch q.Method {
+				case "candy":
 					answer := truncateAnswer(reply.Answer)
 					preview := compactAnswerPreview(answer)
 					matched := MatchesCandy(answer)
@@ -163,15 +210,33 @@ challengeLoop:
 						round.Outcome, round.ReasonCode, round.Reason = "downshift", "candy-mismatch", fmt.Sprintf("糖果题答案不正确：%s", preview)
 					}
 					break challengeLoop
+				case "pelican":
+					round.Evidence.Pelican = &Pelican{
+						PromptID:     "pelican-bicycle-svg",
+						Question:     PelicanQuestion,
+						SVG:          pelicanSVG,
+						SVGBytes:     len(pelicanSVG),
+						StrictFormat: pelicanStrict,
+						FormatNote:   pelicanFormatNote,
+					}
+					round.Outcome = "uncertain"
+					round.ReasonCode = "pelican-awaiting-judgment"
+					round.Reason = "已生成鹈鹕骑自行车 SVG 动画，待肉眼判定分组"
+					if retries > 0 {
+						round.Reason = "重试后已生成鹈鹕骑自行车 SVG 动画，待肉眼判定分组"
+					}
+					break challengeLoop
+				default:
+					samples = append(samples, numbers)
+					round.Evidence.Fingerprint.ValidSamples = len(samples)
+					break
 				}
-				samples = append(samples, numbers)
-				round.Evidence.Fingerprint.ValidSamples = len(samples)
 				break
 			}
-			// 真实429与502/503共用有限重试；本地守卫、认证和其它4xx不重试。
+			// 真实 429 与 502/503 共用有限重试；本地守卫、认证和其它 4xx 不重试。
 			if (err == nil && (reply.LocalState || reply.Status >= 400 && reply.Status < 500 && reply.Status != 429)) || retries >= settings.Retry.MaxRetries {
 				if err == nil && reply.Status >= 400 && reply.Status < 500 && reply.Status != 429 {
-					round.Reason = "CPA 拒绝请求，未形成能力判定"
+					round.Reason = fmt.Sprintf("请求返回错误码 HTTP %d，CPA 拒绝请求，未形成能力判定", reply.Status)
 				}
 				break challengeLoop
 			}
@@ -193,7 +258,33 @@ challengeLoop:
 			applyFingerprintResult(round, result, retries > 0)
 		}
 	}
+	if ctx.Err() == nil {
+		finalizeErrorReason(round, spec, len(samples))
+	}
 	return codes
+}
+
+func finalizeErrorReason(round *Round, spec inspectionMethodSpec, validSamples int) {
+	if round.Outcome != "uncertain" || round.Evidence.ServiceError != nil || round.Reason != spec.missingReason {
+		return
+	}
+	summary := summarizeAttemptErrors(round.Evidence.Attempts)
+	codeText := formatHTTPStatusSequence(summary.httpCodes)
+	if len(summary.httpCodes) > 0 && !summary.has200Invalid && summary.networkErrors == 0 {
+		round.Reason = spec.formatHTTPReason(codeText, validSamples, true)
+		return
+	}
+	if len(summary.httpCodes) > 0 {
+		round.Reason = spec.formatHTTPReason(codeText, validSamples, false)
+		return
+	}
+	if summary.networkErrors > 0 && !summary.has200Invalid {
+		round.Reason = spec.formatNetworkReason(summary.networkErrors, validSamples)
+		return
+	}
+	if spec.id == "pelican" && round.Evidence.Pelican != nil && round.Evidence.Pelican.RawSnippet != "" {
+		round.Reason = "模型未返回有效的 <svg> 源码，待重新绘制"
+	}
 }
 
 func truncateAnswer(answer string) string {

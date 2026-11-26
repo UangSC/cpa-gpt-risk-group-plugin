@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { useStore } from '../store/store'
-import { changedSettings, settingsErrors } from '../lib/settingsDraft'
-import { Icon, Modal } from './ui'
+import { useStore } from '../../store/store'
+import { changedSettings, settingsErrors } from '../../lib/settingsDraft'
+import { Icon, Modal } from '../ui'
 
 export function SettingsSavePrompt() {
   const actual = useStore((state) => state.settings)

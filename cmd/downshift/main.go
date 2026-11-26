@@ -39,6 +39,9 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, api *C.cliproxy_plugin_api)
 	if host == nil || api == nil || host.abi_version != 1 || host.call == nil || host.free_buffer == nil {
 		return 1
 	}
+	if instance != nil {
+		instance.close()
+	}
 	C.store_host(host)
 	instance = &plugin{host: callHost}
 	api.abi_version = 1
@@ -118,6 +121,9 @@ func callHost(method string, request any, result any) error {
 		defer C.host_free(response.ptr, response.len)
 	}
 	if response.ptr == nil || response.len > 16<<20 {
+		if code != 0 {
+			return errors.New("CPA 宿主回调返回错误码")
+		}
 		return errors.New("CPA 宿主返回无效缓冲区")
 	}
 	var out envelope

@@ -218,4 +218,45 @@ export const Icon = {
       <path d="M3.2 8c0 1 2.1 1.8 4.8 1.8s4.8-.8 4.8-1.8" stroke="currentColor" strokeWidth="1.2" />
     </svg>
   ),
+  Expand: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path
+        d="M10 2.5h3.5V6M13.5 2.5 9.2 6.8M6 13.5H2.5V10M2.5 13.5l4.3-4.3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  Copy: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <rect x="5.4" y="5.4" width="7.8" height="7.8" rx="1.4" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M10.4 5.4V3.9c0-.8-.6-1.4-1.4-1.4H3.9c-.8 0-1.4.6-1.4 1.4V9c0 .8.6 1.4 1.4 1.4h1.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  Code: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+      <path
+        d="m5.3 4.8-3.1 3.2 3.1 3.2M10.7 4.8l3.1 3.2-3.1 3.2M9.1 3.4 6.9 12.6"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  PelicanBike: () => (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+      <circle cx="9.5" cy="26" r="4.8" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="26.5" cy="26" r="4.8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M9.5 26 15.5 19h7.5l3.5 7M15.5 19l2.5 7h8.5M22.5 16.5l1 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 18.5c-2.2-1.8-2.8-5.1-.8-7.2 1.5-1.6 3.9-1.5 5.3.2l1.2-2.6c.5-1.1 1.8-1.7 3-1.4l5.2 1.2c-1 2.1-3.3 3.3-5.6 2.8l-1.3 3.6" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 }

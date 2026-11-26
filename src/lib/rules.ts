@@ -75,6 +75,9 @@ export const REASON_LABEL: Record<ReasonCode, string> = {
   'candy-mismatch': '糖果题答案不符',
   'fingerprint-anomaly': '指纹异常',
   'fingerprint-insufficient': '指纹证据不足',
+  'pelican-awaiting-judgment': '待人工判定',
+  'pelican-judged-normal': '人工判为正常',
+  'pelican-judged-downshift': '人工判为风控',
   'repeated-service-errors': '频繁请求异常',
   'single-service-error': '本轮请求异常',
   'auth-expired': '认证失效',
@@ -88,8 +91,11 @@ export const REASON_DESC: Record<ReasonCode, string> = {
   'all-tests-passed': '本轮所选测试全部通过，未出现需要重试的请求错误。',
   'passed-after-retry': '请求曾出现服务错误或无效回答，但在本轮共用的重试次数内成功；所选测试全部通过。',
   'candy-mismatch': '糖果题的正确答案应为 21，模型回答中未出现独立的 21。',
-  'fingerprint-anomaly': '三次有效结果未满足正常条件：目标参考不匹配，或目标归因概率未严格大于 90%。',
+  'fingerprint-anomaly': '三次有效结果中，目标参考未匹配，或目标归因概率未超过本轮阈值。',
   'fingerprint-insufficient': '不足三份有效数字序列，或请求模型尚未登记到参考库，因此本轮保持不确定。',
+  'pelican-awaiting-judgment': '已输出鹈鹕骑自行车 SVG 动画，系统不自动更改分组，请观察动画细节后手动点击分组按钮。',
+  'pelican-judged-normal': '管理员观察鹈鹕骑自行车 SVG 动画后手动归为正常，并按当前分组策略记录或同步。',
+  'pelican-judged-downshift': '管理员观察鹈鹕骑自行车 SVG 动画后手动归为风控，并按当前分组策略记录或同步。',
   'repeated-service-errors':
     '502、503、429 混合计入同一类频繁异常。达到单轮请求门槛就停止本轮并归入风控；恢复需要新一轮完整通过。',
   'single-service-error':

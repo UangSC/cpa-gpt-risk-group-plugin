@@ -29,10 +29,16 @@ func fingerprintWithReasoning(settings Settings, includeSchedule, includeReasoni
 	}
 	data := map[string]any{"mode": settings.Routing.Mode, "prefixes": settings.Prefixes, "groups": groups, "overrides": overrides, "method": settings.InspectionMethod, "model": settings.InspectionModel, "retry": settings.Retry, "failure": settings.FailureRule, "quota": settings.Quota, "concurrency": settings.Concurrency}
 	data["transientErrorPolicy"] = "real-http-502-503-429/attempt-threshold-and-host-cooldown-v2"
+	if settings.InspectFreeAccounts {
+		data["inspectFreeAccounts"] = true
+	}
 	if settings.InspectionMethod == "fingerprint" {
 		data["fingerprintPolicy"] = fingerprint.PolicyID()
-		data["fingerprintThreshold"] = fingerprint.ConfidenceThreshold
+		data["fingerprintThreshold"] = settings.fingerprintThreshold()
 		data["fingerprintChallenges"] = fingerprint.ChallengeCount
+	}
+	if settings.InspectionMethod == "pelican" {
+		data["pelicanPolicy"] = pelicanPolicyID
 	}
 	if includeReasoning {
 		data["reasoningEffort"] = settings.ReasoningEffort

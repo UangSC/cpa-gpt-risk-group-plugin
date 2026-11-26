@@ -2,7 +2,7 @@ import type { InspectionRound, Target } from '../types'
 import { formatClock, formatDuration, formatRelative } from '../lib/format'
 import { lightSequence, roundTone } from '../lib/derive'
 import { countRetries, REASON_LABEL, testLabel } from '../lib/rules'
-import { inspectionResultReason } from '../lib/inspectionResult'
+import { formatHttpStatusCodes, inspectionResultReason, roundErrorInfo } from '../lib/inspectionResult'
 import { STATUS_TOOLTIP_DELAY_MS } from '../lib/tooltipInteraction'
 import { Dot, HoverCard } from './ui'
 
@@ -30,6 +30,11 @@ function RoundTip({ round }: { round: InspectionRound }) {
   const attempts = round.evidence.attempts.length
   const retries = countRetries(round.evidence.attempts)
   const tone = roundTone(round)
+  const errInfo = roundErrorInfo(round)
+  const reasonIsError = round.outcome !== 'normal' && (errInfo.hasError || round.outcome === 'blocked' || round.outcome === 'downshift')
+  const serviceSummary = round.evidence.serviceError?.codes?.length
+    ? (formatHttpStatusCodes(round.evidence.serviceError.codes) ?? round.evidence.serviceError.codes.join(' / '))
+    : null
   return (
     <>
       <div className={`tip-title tip-title-${tone}`}>
@@ -49,15 +54,21 @@ function RoundTip({ round }: { round: InspectionRound }) {
       </div>
       <div className="tip-row">
         <span className="tip-k">原因</span>
-        <span className="tip-v">
+        <span className={reasonIsError ? 'tip-v tip-v-danger' : 'tip-v'}>
           {inspectionResultReason(round) ?? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${round.reason}`}
         </span>
       </div>
+      {round.outcome !== 'normal' && errInfo.lastCodeLabel && (
+        <div className="tip-row">
+          <span className="tip-k">最后错误码</span>
+          <span className="tip-v tip-v-danger mono">{errInfo.lastCodeLabel}</span>
+        </div>
+      )}
       {round.evidence.serviceError && (
         <div className="tip-row">
           <span className="tip-k">服务错误</span>
           <span className="tip-v">
-            {round.evidence.serviceError.codes.join(' / ')} · 最近{' '}
+            <span className="tip-v-danger mono">{serviceSummary ?? round.evidence.serviceError.codes.join(' / ')}</span> · 最近{' '}
             {round.evidence.serviceError.windowSize} 轮中{' '}
             {round.evidence.serviceError.errorRoundsInWindow} 轮出现
           </span>

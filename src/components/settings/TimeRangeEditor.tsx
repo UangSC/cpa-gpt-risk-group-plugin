@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent } from 'react'
-import type { ScheduleSettings } from '../types'
-import { adjustWindow, minuteLabel } from '../lib/schedule'
-import { Select } from './ui'
+import type { ScheduleSettings } from '../../types'
+import { adjustWindow, minuteLabel } from '../../lib/schedule'
+import { Select } from '../ui'
 
 type WindowRange = ScheduleSettings['windows'][number]
 

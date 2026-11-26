@@ -39,7 +39,7 @@ func New(adapter cpa.Adapter, stateDir string) (*Service, error) {
 	if err != nil {
 		loc = time.FixedZone("Asia/Shanghai", 8*3600)
 	}
-	s := &Service{adapter: adapter, path: filepath.Join(stateDir, "state.json"), ctx: ctx, cancel: cancel, tasks: map[string]*inspectionQueue{}, location: loc, state: diskState{Version: 8, Settings: DefaultSettings(), Records: map[string]*Record{}, Tasks: []Task{}}}
+	s := &Service{adapter: adapter, path: filepath.Join(stateDir, "state.json"), ctx: ctx, cancel: cancel, tasks: map[string]*inspectionQueue{}, location: loc, state: diskState{Version: stateVersion, Settings: DefaultSettings(), Records: map[string]*Record{}, Tasks: []Task{}}}
 	if err := s.loadState(); err != nil {
 		cancel()
 		return nil, err

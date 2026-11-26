@@ -3,8 +3,8 @@ import { type CredentialView } from '../../lib/derive'
 import { Chip, HoverCard, PlanMark, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { ActivityRail, type CredentialRuntime, StatusPill, GroupCell, QuotaCell, StateChips, Actions, resolveCardActivity, stop } from './CredentialParts'
-import { CardNote, cardNote } from './SelectableCard'
+import { ActivityRail, type CredentialRuntime, FreeSkipChip, StatusPill, GroupCell, QuotaCell, StateChips, Actions, resolveCardActivity, stop } from './CredentialParts'
+import { CardNote, CardNoteTooltip, cardNoteTone } from './SelectableCard'
 
 /* ------------------------------------------------------------------- list */
 
@@ -56,6 +56,8 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
         const selected = !isDisabled && selection.has(view.credential.id)
         const activity = !isDisabled ? resolveCardActivity(view.credential.id, runtime) : null
         const quotaRefreshing = !isDisabled && runtime.quotaRefreshingIds.has(view.credential.id)
+        const noteTone = cardNoteTone(view, isDisabled)
+        const noteClass = noteTone === 'error' ? 'is-error' : noteTone === 'calm' ? 'is-calm' : ''
         return (
           <div
             key={view.credential.id}
@@ -63,8 +65,8 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
             data-testid={`cred-${view.credential.id}`}
             data-credential-id={view.credential.id}
             data-exclusion-source={!isDisabled ? 'true' : undefined}
-            onClick={() => {
-              if (!isDisabled) selection.toggle(view.credential.id)
+            onClick={(event) => {
+              if (!isDisabled) selection.toggle(view.credential.id, event.shiftKey)
             }}
           >
             <ActivityRail activity={activity} />
@@ -74,8 +76,10 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
                 className="checkbox"
                 checked={selected}
                 disabled={isDisabled}
-                onChange={() => {
-                  if (!isDisabled) selection.toggle(view.credential.id)
+                onChange={() => {}}
+                onClick={(event) => {
+                  stop(event)
+                  if (!isDisabled) selection.toggle(view.credential.id, event.shiftKey)
                 }}
                 aria-label={isDisabled ? '已关闭的凭证无法勾选' : '选择凭证'}
               />
@@ -87,6 +91,7 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
                 <div className="cred-name-line">
                   <SecretName name={view.credential.name} className="cred-name" />
                   {isDisabled && <Chip tone="plain">已关闭</Chip>}
+                  <FreeSkipChip view={view} settings={runtime.settings} />
                   {activity && (
                     <Chip tone={activity.chipTone} dot>
                       {activity.label}
@@ -104,17 +109,13 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
                   {!isDisabled && <StateChips view={view} />}
                 </div>
                 <div className="cred-meta">
-                  <HoverCard compact wrapperClassName="summary-tip-wrap" content={`${cardNote(view)} · ${view.credential.file}`}>
-                    <span
-                      className={`cred-meta-note ${
-                        !isDisabled && view.verdict === 'downshift'
-                          ? 'is-downshift'
-                          : !isDisabled && view.verdict === 'normal'
-                            ? 'is-calm'
-                            : ''
-                      }`}
-                    >
-                      <CardNote view={view} />
+                  <HoverCard
+                    compact
+                    wrapperClassName="summary-tip-wrap"
+                    content={<CardNoteTooltip view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />}
+                  >
+                    <span className={`cred-meta-note ${noteClass}`}>
+                      <CardNote view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />
                     </span>
                   </HoverCard>
                   <span className="cred-meta-sep" aria-hidden="true">·</span>
@@ -147,7 +148,7 @@ export function CredentialList({ views, runtime }: { views: CredentialView[]; ru
             </div>
 
             <div className="cred-row-actions" data-list-cell="actions">
-              <Actions view={view} runtime={runtime} mode="list" />
+              <Actions view={view} runtime={runtime} mode="list" showQuickRun />
             </div>
           </div>
         )

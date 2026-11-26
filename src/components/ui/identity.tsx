@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store/store'
 import { HoverCard } from './HoverCard'
 import { Icon } from './icons'
@@ -38,9 +39,17 @@ export function SecretName({
   className?: string
 }) {
   const masked = useStore((s) => s.settings.maskNames)
+  const [copied, setCopied] = useState(false)
+  const resetTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current)
+  }, [])
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(name)
+      setCopied(true)
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current)
+      resetTimer.current = window.setTimeout(() => setCopied(false), 1400)
       useStore.getState().notify({ tone: 'success', title: '完整账号名称已复制' })
     } catch {
       useStore.getState().notify({ tone: 'warning', title: '未能复制账号名称', detail: '请检查浏览器剪贴板权限。' })
@@ -51,11 +60,11 @@ export function SecretName({
       <HoverCard
         compact
         placement="top"
-        content="点击复制账号名称"
+        content={copied ? '✓ 已复制账号名称' : '点击复制账号名称'}
         wrapperStyle={{ display: 'inline-flex', maxWidth: '100%', minWidth: 0 }}
       >
         <span
-          className="secret-name secret-name-trigger"
+          className={`secret-name secret-name-trigger${copied ? ' is-copied' : ''}`}
           role="button"
           tabIndex={0}
           aria-label={masked ? '复制账号名称' : `复制 ${name}`}

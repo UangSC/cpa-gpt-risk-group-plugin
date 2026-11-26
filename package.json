@@ -2,7 +2,7 @@
   "name": "cpa-gpt-risk-group-plugin",
   "private": true,
   "version": "0.1.5",
-  "description": "适用于 CLIProxyAPI 的 Codex 凭证风控检测与分组管理插件",
+  "description": "适用于 CLIProxyAPI 的 Codex 凭证糖果题、模型指纹与画鹈鹕 SVG 风控检测及分组管理插件",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/UangSC/cpa-gpt-risk-group-plugin.git"

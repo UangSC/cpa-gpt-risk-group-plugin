@@ -44,9 +44,11 @@ type Settings struct {
 		Normal    string `json:"normal"`
 		Downshift string `json:"downshift"`
 	} `json:"prefixes"`
-	Routing          RoutingSettings `json:"routing"`
-	InspectionMethod string          `json:"inspectionMethod"`
-	Retry            struct {
+	Routing                     RoutingSettings `json:"routing"`
+	InspectionMethod            string          `json:"inspectionMethod"`
+	InspectFreeAccounts         bool            `json:"inspectFreeAccounts"`
+	FingerprintThresholdPercent *float64        `json:"fingerprintThresholdPercent"`
+	Retry                       struct {
 		MaxRetries    int     `json:"maxRetries"`
 		BaseDelayMs   int     `json:"baseDelayMs"`
 		BackoffFactor float64 `json:"backoffFactor"`
@@ -79,6 +81,8 @@ func DefaultSettings() Settings {
 	s.Prefixes.Downshift = "downshift"
 	s.Routing = RoutingSettings{Mode: "none", Groups: map[string]RoutingValues{"normal": {Priority: 10, Weight: 10}, "downshift": {Priority: -10, Weight: 1}, "ungrouped": {Priority: 0, Weight: 10}}, Overrides: map[string]RoutingValues{}}
 	s.InspectionMethod = "candy"
+	defaultFingerprintThreshold := defaultFingerprintThresholdPercent
+	s.FingerprintThresholdPercent = &defaultFingerprintThreshold
 	s.InspectionModel = "gpt-6.1-sol"
 	s.ReasoningEffort = "low"
 	s.HeaderOverrides = map[string]string{}
@@ -172,6 +176,19 @@ type Candy struct {
 	FormatNote string `json:"formatNote"`
 }
 
+type Pelican struct {
+	PromptID      string `json:"promptId"`
+	Question      string `json:"question"`
+	SVG           string `json:"svg,omitempty"`
+	SVGBytes      int    `json:"svgBytes"`
+	SVGPruned     bool   `json:"svgPruned,omitempty"`
+	RawSnippet    string `json:"rawSnippet,omitempty"`
+	StrictFormat  bool   `json:"strictFormat"`
+	FormatNote    string `json:"formatNote"`
+	JudgedVerdict string `json:"judgedVerdict,omitempty"`
+	JudgedAt      string `json:"judgedAt,omitempty"`
+}
+
 type FingerprintSample struct {
 	ChallengeID   string `json:"challengeId"`
 	PromptSummary string `json:"promptSummary"`
@@ -217,6 +234,7 @@ type Evidence struct {
 	Tests        []string        `json:"tests"`
 	Candy        *Candy          `json:"candy,omitempty"`
 	Fingerprint  *Fingerprint    `json:"fingerprint,omitempty"`
+	Pelican      *Pelican        `json:"pelican,omitempty"`
 	Attempts     []Attempt       `json:"attempts"`
 	Errors       []EvidenceError `json:"errors"`
 	Usage        *Usage          `json:"usage"`

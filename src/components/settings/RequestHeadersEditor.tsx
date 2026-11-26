@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from '../store/store'
-import { useSettingsEditor } from '../store/settingsEditor'
+import { useStore } from '../../store/store'
+import { useSettingsEditor } from '../../store/settingsEditor'
 import {
   deserializeHeaderOverrideRows,
   DRAFT_JSON_ERROR_KEY,
   headerOverrideErrors,
   serializeHeaderOverrideRows,
   type HeaderOverrideRow,
-} from '../lib/settingsDraft'
+} from '../../lib/settingsDraft'
 import { SettingsPanel } from './SettingsPanel'
-import { Icon, Segmented } from './ui'
+import { Icon, Segmented } from '../ui'
 
 const HEADER_ORDER = ['user-agent', 'originator', 'version', 'content-type', 'accept']
 

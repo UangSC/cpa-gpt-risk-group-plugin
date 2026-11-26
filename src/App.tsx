@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import pluginLogo from '../assets/logo.svg'
 import { useStore, type TabKey } from './store/store'
 import { Overview } from './views/Overview'
@@ -6,10 +6,10 @@ import { RunPanel } from './components/RunPanel'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { ExclusionDrawer, ExclusionIcon } from './components/ExclusionDrawer'
 import { Toasts } from './components/Toasts'
-import { SettingsSavePrompt } from './components/SettingsSavePrompt'
+import { SettingsSavePrompt } from './components/settings/SettingsSavePrompt'
 import { InspectionConfirmationDialog } from './components/InspectionConfirmationDialog'
 import { WeightZeroWarningDialog } from './components/WeightZeroWarningDialog'
-import { HoverCard, Icon, NameMaskToggle, SelectionProvider, useSelectionSet } from './components/ui'
+import { HoverCard, Icon, NameMaskToggle, SelectionProvider, useSelectionSet, useSlidingIndicator } from './components/ui'
 import { handleApplicationShortcut } from './lib/applicationShortcuts'
 import { changedSettings } from './lib/settingsDraft'
 import { isManuallyExcluded } from './lib/derive'
@@ -17,12 +17,14 @@ import { isManuallyExcluded } from './lib/derive'
 const loadStatistics = () => import('./views/Statistics')
 const loadHistory = () => import('./views/History')
 const loadSettings = () => import('./views/Settings')
-const loadEvidenceSheet = () => import('./components/EvidenceSheet')
+const loadEvidenceSheet = () => import('./components/evidence/EvidenceSheet')
+const loadPelicanLightbox = () => import('./components/pelican/PelicanLightbox')
 
 const Statistics = lazy(() => loadStatistics().then((m) => ({ default: m.Statistics })))
 const HistoryView = lazy(() => loadHistory().then((m) => ({ default: m.HistoryView })))
 const SettingsView = lazy(() => loadSettings().then((m) => ({ default: m.SettingsView })))
 const EvidenceSheet = lazy(() => loadEvidenceSheet().then((m) => ({ default: m.EvidenceSheet })))
+const PelicanLightbox = lazy(() => loadPelicanLightbox().then((m) => ({ default: m.PelicanLightbox })))
 
 const TAB_PRELOADERS: Partial<Record<TabKey, () => Promise<unknown>>> = {
   statistics: loadStatistics,
@@ -54,6 +56,16 @@ export default function App() {
     s.credentials.reduce((count, credential) => count + Number(isManuallyExcluded(credential)), 0),
   )
   const hasDetail = useStore((s) => Boolean(s.detail))
+  const hasPelicanLightbox = useStore((s) => Boolean(s.pelicanLightbox))
+  const [detailMounted, setDetailMounted] = useState(false)
+  const [lightboxMounted, setLightboxMounted] = useState(false)
+  useEffect(() => {
+    if (hasDetail) setDetailMounted(true)
+  }, [hasDetail])
+  useEffect(() => {
+    if (hasPelicanLightbox) setLightboxMounted(true)
+  }, [hasPelicanLightbox])
+
   const settingsDirty = useMemo(() => changedSettings(settings, settingsDraft).length > 0, [settings, settingsDraft])
   const selected = useStore((s) => s.selected)
   const toggleSelect = useStore((s) => s.toggleSelect)
@@ -62,6 +74,10 @@ export default function App() {
   const openDetail = useStore((s) => s.openDetail)
   const setRunPanel = useStore((s) => s.setRunPanel)
   const updateSettings = useStore((s) => s.updateSettings)
+  const navRef = useRef<HTMLElement>(null)
+  const navPill = useSlidingIndicator(navRef, tab)
+  const lastClickedIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     document.documentElement.dataset.pluginTheme = settings.theme
   }, [settings.theme])
@@ -71,16 +87,47 @@ export default function App() {
     document.documentElement.dataset.maskNames = settings.maskNames ? 'true' : 'false'
   }, [settings.maskNames])
 
+  const handleToggleSelect = useCallback(
+    (id: string, shiftKey?: boolean) => {
+      if (shiftKey && lastClickedIdRef.current && lastClickedIdRef.current !== id) {
+        const ordered = Array.from(
+          document.querySelectorAll<HTMLElement>('[data-credential-id][data-exclusion-source="true"]'),
+        )
+          .map((el) => el.dataset.credentialId)
+          .filter((cid): cid is string => Boolean(cid))
+        const anchorIdx = ordered.indexOf(lastClickedIdRef.current)
+        const targetIdx = ordered.indexOf(id)
+        if (anchorIdx >= 0 && targetIdx >= 0) {
+          const [from, to] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+          const rangeIds = ordered.slice(from, to + 1)
+          const cur = useStore.getState().selected
+          const shouldSelect = !cur.includes(id)
+          if (shouldSelect) {
+            setSelected([...new Set([...cur, ...rangeIds])])
+          } else {
+            const drop = new Set(rangeIds)
+            setSelected(cur.filter((item) => !drop.has(item)))
+          }
+          lastClickedIdRef.current = id
+          return
+        }
+      }
+      lastClickedIdRef.current = id
+      toggleSelect(id)
+    },
+    [toggleSelect, setSelected],
+  )
+
   const selectionSet = useSelectionSet(selected)
   const selectionApi = useMemo(
     () => ({
       selected,
-      toggle: toggleSelect,
+      toggle: handleToggleSelect,
       set: setSelected,
       clear: clearSelection,
       has: (id: string) => selectionSet.has(id),
     }),
-    [selected, toggleSelect, setSelected, clearSelection, selectionSet],
+    [selected, handleToggleSelect, setSelected, clearSelection, selectionSet],
   )
 
   // Every credential needs an evidence record for whichever model is being inspected.
@@ -111,7 +158,25 @@ export default function App() {
               <h1 className="brand-title">Codex 风控检测</h1>
             </div>
 
-            <nav className="nav" aria-label="主导航">
+            <nav
+              ref={navRef}
+              className="nav"
+              data-sliding={navPill.ready ? 'true' : undefined}
+              aria-label="主导航"
+            >
+              {navPill.ready && (
+                <span
+                  className="sliding-pill"
+                  data-animate={navPill.animate ? 'true' : undefined}
+                  aria-hidden="true"
+                  style={
+                    {
+                      '--pill-x': `${navPill.x}px`,
+                      '--pill-w': `${navPill.w}px`,
+                    } as CSSProperties
+                  }
+                />
+              )}
               {TABS.map((item) => (
                 <HoverCard
                   key={item.key}
@@ -204,23 +269,30 @@ export default function App() {
 
         <main className="page">
           <ConnectionPanel />
-          {tab === 'overview' && <Overview onOpenDetail={openDetail} />}
-          {tab !== 'overview' && (
-            <Suspense fallback={<div className="empty" style={{ padding: '48px 16px' }}>正在加载视图…</div>}>
-              {tab === 'statistics' && <Statistics />}
-              {tab === 'history' && <HistoryView onOpenDetail={openDetail} />}
-              {tab === 'settings' && <SettingsView />}
-            </Suspense>
-          )}
+          <div className="tab-stage" key={tab}>
+            {tab === 'overview' && <Overview onOpenDetail={openDetail} />}
+            {tab !== 'overview' && (
+              <Suspense fallback={<div className="empty" style={{ padding: '48px 16px' }}>正在加载视图…</div>}>
+                {tab === 'statistics' && <Statistics />}
+                {tab === 'history' && <HistoryView onOpenDetail={openDetail} />}
+                {tab === 'settings' && <SettingsView />}
+              </Suspense>
+            )}
+          </div>
         </main>
 
         <RunPanel />
         <InspectionConfirmationDialog />
         <WeightZeroWarningDialog />
         <ExclusionDrawer />
-        {hasDetail && (
+        {(hasDetail || detailMounted) && (
           <Suspense fallback={null}>
             <EvidenceSheet />
+          </Suspense>
+        )}
+        {(hasPelicanLightbox || lightboxMounted) && (
+          <Suspense fallback={null}>
+            <PelicanLightbox />
           </Suspense>
         )}
         <Toasts />

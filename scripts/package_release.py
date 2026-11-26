@@ -42,6 +42,8 @@ def release_identity(tag):
     plugins = registry.get("plugins") or []
     if len(plugins) != 1 or plugins[0].get("id") != plugin_id:
         raise ValueError("商店插件 ID 与包名不一致")
+    if plugins[0].get("version") and plugins[0].get("version") != version:
+        raise ValueError("store/registry.json 的 version 与 package.json 不一致")
     repository = plugins[0].get("repository", "")
     if not re.fullmatch(r"https://github\.com/[^/]+/[^/]+", repository):
         raise ValueError("商店仓库地址必须为 https://github.com/{owner}/{repo}")

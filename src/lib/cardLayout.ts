@@ -2,12 +2,18 @@ import { useLayoutEffect, useState, type RefObject } from 'react'
 
 export const CARD_MIN_WIDTH = 308
 export const CARD_GRID_GAP = 12
+export const PELICAN_CARD_MIN_WIDTH = 400
+export const PELICAN_CARD_GAP = 16
 export const DEFAULT_CARD_PAGE_SIZE = 12
 
 /** 根据容器可用宽度计算卡片视图最合适的列数。 */
-export function computeCardColumns(containerWidth: number): number {
+export function computeCardColumns(
+  containerWidth: number,
+  minWidth = CARD_MIN_WIDTH,
+  gap = CARD_GRID_GAP,
+): number {
   if (!Number.isFinite(containerWidth) || containerWidth <= 0) return 3
-  return Math.max(1, Math.floor((containerWidth + CARD_GRID_GAP) / (CARD_MIN_WIDTH + CARD_GRID_GAP)))
+  return Math.max(1, Math.floor((containerWidth + gap) / (minWidth + gap)))
 }
 
 /**
@@ -26,14 +32,19 @@ export function alignCardPageSize(preferred: number, columns: number): number {
   return Math.max(cols, down)
 }
 
-function estimateInitialColumns(): number {
+function estimateInitialColumns(minWidth = CARD_MIN_WIDTH, gap = CARD_GRID_GAP): number {
   if (typeof window === 'undefined') return 3
-  return computeCardColumns(Math.min(window.innerWidth, 1380) - 36)
+  return computeCardColumns(Math.min(window.innerWidth, 1380) - 36, minWidth, gap)
 }
 
 /** 仅在卡片布局激活时监听容器宽度变化，并只在整数列数变化时触发重渲染。 */
-export function useAdaptiveCardColumns(ref: RefObject<HTMLElement | null>, active: boolean): number {
-  const [columns, setColumns] = useState<number>(estimateInitialColumns)
+export function useAdaptiveCardColumns(
+  ref: RefObject<HTMLElement | null>,
+  active: boolean,
+  minWidth = CARD_MIN_WIDTH,
+  gap = CARD_GRID_GAP,
+): number {
+  const [columns, setColumns] = useState<number>(() => estimateInitialColumns(minWidth, gap))
 
   useLayoutEffect(() => {
     if (!active) return
@@ -41,7 +52,7 @@ export function useAdaptiveCardColumns(ref: RefObject<HTMLElement | null>, activ
     if (!el) return
     const update = (width: number) => {
       if (width <= 0) return
-      const next = computeCardColumns(width)
+      const next = computeCardColumns(width, minWidth, gap)
       setColumns((prev) => (prev === next ? prev : next))
     }
     update(el.clientWidth)
@@ -56,7 +67,7 @@ export function useAdaptiveCardColumns(ref: RefObject<HTMLElement | null>, activ
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [ref, active])
+  }, [ref, active, minWidth, gap])
 
   return columns
 }

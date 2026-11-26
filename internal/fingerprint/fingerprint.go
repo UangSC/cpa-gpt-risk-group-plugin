@@ -16,12 +16,11 @@ import (
 )
 
 const (
-	ChallengeCount      = 3
-	ConfidenceThreshold = 0.90
-	maxAnswerBytes      = 64000
-	fingerprintTarget   = ChallengeCount
-	SourceCommit        = "a4ef212df06817e8071acd05f00219f4c9eb2f9a"
-	PortCommit          = "86d832c58f85f33e0cff91368fae1cb1012899f8"
+	ChallengeCount    = 3
+	maxAnswerBytes    = 64000
+	fingerprintTarget = ChallengeCount
+	SourceCommit      = "a4ef212df06817e8071acd05f00219f4c9eb2f9a"
+	PortCommit        = "86d832c58f85f33e0cff91368fae1cb1012899f8"
 )
 
 //go:embed data/enrollment-suite.json

@@ -13,8 +13,16 @@ import (
 
 const pluginID = "cpa-gpt-risk-group-plugin"
 const version = "0.1.5"
+const maxSupportedSchemaVersion uint32 = 6
 const apiPrefix = "/v0/management/plugins/" + pluginID
 const resourcePrefix = "/v0/resource/plugins/" + pluginID
+
+func negotiateSchemaVersion(hostSchemaVersion uint32) uint32 {
+	if hostSchemaVersion == 0 || hostSchemaVersion >= maxSupportedSchemaVersion {
+		return maxSupportedSchemaVersion
+	}
+	return hostSchemaVersion
+}
 
 type plugin struct {
 	mu       sync.RWMutex
@@ -44,7 +52,8 @@ func (p *plugin) call(method string, raw []byte) (any, error) {
 	switch method {
 	case "plugin.register", "plugin.reconfigure":
 		var req struct {
-			Config []byte `json:"config_yaml"`
+			Config        []byte `json:"config_yaml"`
+			SchemaVersion uint32 `json:"schema_version"`
 		}
 		if len(raw) > 0 && json.Unmarshal(raw, &req) != nil {
 			return nil, errors.New("插件配置请求格式无效")
@@ -52,9 +61,9 @@ func (p *plugin) call(method string, raw []byte) (any, error) {
 		if err := p.configure(req.Config); err != nil {
 			return nil, err
 		}
-		return map[string]any{"schema_version": 6, "metadata": map[string]any{"Name": "Codex 风控检测与分类", "Version": version, "Author": "UangSC", "GitHubRepository": "https://github.com/UangSC/cpa-gpt-risk-group-plugin", "Logo": "https://raw.githubusercontent.com/UangSC/cpa-gpt-risk-group-plugin/main/assets/logo.svg", "ConfigFields": []any{
+		return map[string]any{"schema_version": negotiateSchemaVersion(req.SchemaVersion), "metadata": map[string]any{"Name": "Codex 风控检测与分类", "Version": version, "Author": "UangSC", "GitHubRepository": "https://github.com/UangSC/cpa-gpt-risk-group-plugin", "Logo": "https://raw.githubusercontent.com/UangSC/cpa-gpt-risk-group-plugin/main/assets/logo.svg", "ConfigFields": []any{
 			map[string]any{"Name": "api_base", "Type": "string", "Default": "http://127.0.0.1:8317", "Description": "本机 CPA 官方管理接口地址（仅允许回环 IP）"},
-			map[string]any{"Name": "management_key", "Type": "string", "Default": "", "Description": "CPA 管理密钥，仅在插件服务端使用；请勿提交到共享仓库"},
+			map[string]any{"Name": "management_key", "Type": "string", "Default": "", "Description": "后台启动备用密钥，可留空复用 CPA 的 MANAGEMENT_PASSWORD 或管理登录"},
 			map[string]any{"Name": "state_dir", "Type": "string", "Default": "", "Description": "插件独立状态目录，留空使用 CPA 旁的 plugin-data 目录"},
 		}}, "capabilities": map[string]bool{"management_api": true}}, nil
 	case "management.register":
@@ -87,6 +96,9 @@ func (p *plugin) configure(raw []byte) error {
 	}
 	if options.ManagementKey == "" {
 		options.ManagementKey = envWithFallback("CPA_RISK_GROUP_MANAGEMENT_KEY", "CPA_DOWNSHIFT_MANAGEMENT_KEY")
+	}
+	if options.ManagementKey == "" {
+		options.ManagementKey = os.Getenv("MANAGEMENT_PASSWORD")
 	}
 	stateDir := config["state_dir"]
 	if stateDir == "" {

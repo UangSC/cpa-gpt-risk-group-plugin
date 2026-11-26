@@ -83,33 +83,48 @@ export function Collapse({
   title,
   hint,
   defaultOpen = false,
+  action,
   children,
 }: {
   title: string
   hint?: string
   defaultOpen?: boolean
+  action?: ReactNode
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [everOpened, setEverOpened] = useState(defaultOpen)
   const id = useId()
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev
+      if (next) setEverOpened(true)
+      return next
+    })
+  }
   return (
     <div className={`collapse ${open ? 'is-open' : ''}`}>
-      <button
-        type="button"
-        className="collapse-head"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Icon.Chevron dir={open ? 'down' : 'right'} />
-        <span>{title}</span>
-        {hint && <span className="collapse-hint">{hint}</span>}
-      </button>
-      {open && (
-        <div className="collapse-body" id={id}>
-          {children}
+      <div className="collapse-bar">
+        <button
+          type="button"
+          className="collapse-head"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={toggle}
+        >
+          <span className="collapse-chevron" aria-hidden="true">
+            <Icon.Chevron dir="right" />
+          </span>
+          <span>{title}</span>
+          {hint && <span className="collapse-hint">{hint}</span>}
+        </button>
+        {action && <div className="collapse-action">{action}</div>}
+      </div>
+      <div className="collapse-grid" id={id} aria-hidden={!open} inert={!open}>
+        <div className="collapse-inner">
+          {everOpened && <div className="collapse-body">{children}</div>}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -137,10 +152,22 @@ export function Modal({
 }) {
   const autoId = useId()
   const titleId = labelledBy ?? autoId
+  const [present, setPresent] = useState(open)
   const ref = useRef<HTMLDivElement>(null)
   // Keep the latest closer without re-running the open effect on every parent render.
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+
+  useEffect(() => {
+    if (open) {
+      setPresent(true)
+      return
+    }
+    if (!present) return
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 170
+    const timer = window.setTimeout(() => setPresent(false), delay)
+    return () => window.clearTimeout(timer)
+  }, [open, present])
 
   useEffect(() => {
     if (!open) return
@@ -174,15 +201,21 @@ export function Modal({
     }
   }, [open])
 
-  if (!open) return null
+  if (!open && !present) return null
 
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="modal-backdrop"
+      data-open={open}
+      onMouseDown={(e) => open && e.target === e.currentTarget && onClose()}
+    >
       <div
         className={`modal ${wide ? 'is-wide' : ''} ${className ?? ''}`}
-        role="dialog"
-        aria-modal="true"
+        data-open={open}
+        role={open ? 'dialog' : undefined}
+        aria-modal={open || undefined}
         aria-labelledby={titleId}
+        inert={!open}
         ref={ref}
         tabIndex={-1}
       >
@@ -191,7 +224,7 @@ export function Modal({
             <h3 id={titleId}>{title}</h3>
             {sub && <div className="modal-sub">{sub}</div>}
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
             <Icon.Close />
           </button>
         </div>

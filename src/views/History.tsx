@@ -29,7 +29,8 @@ export function HistoryView({ onOpenDetail }: { onOpenDetail: (targetId: string,
   const [visibleLimit, setVisibleLimit] = useState(BATCH_PAGE_SIZE)
   const searchRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => handleHistoryShortcut(event, () => searchRef.current?.focus())
+    const onKey = (event: KeyboardEvent) =>
+      handleHistoryShortcut(event, () => window.setTimeout(() => searchRef.current?.focus(), 0))
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
@@ -58,8 +59,17 @@ export function HistoryView({ onOpenDetail }: { onOpenDetail: (targetId: string,
     <div className="history-toolbar">
       <div className="search">
         <Icon.Search />
-        <input ref={searchRef} type="search" placeholder="搜索凭证、模型或判定原因" value={query}
-          onChange={(event) => { setQuery(event.target.value); setVisibleLimit(BATCH_PAGE_SIZE) }} aria-label="搜索历史记录" />
+        <input ref={searchRef} type="text" role="searchbox" placeholder="搜索凭证、模型或判定原因" value={query}
+          onChange={(event) => { setQuery(event.target.value); setVisibleLimit(BATCH_PAGE_SIZE) }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+              event.preventDefault()
+              event.stopPropagation()
+              if (event.currentTarget.value) { setQuery(''); setVisibleLimit(BATCH_PAGE_SIZE) }
+              else event.currentTarget.blur()
+            }
+          }}
+          aria-label="搜索历史记录" />
         {query ? (
           <button type="button" className="search-clear" onClick={() => { setQuery(''); setVisibleLimit(BATCH_PAGE_SIZE) }} aria-label="清除搜索">✕</button>
         ) : (

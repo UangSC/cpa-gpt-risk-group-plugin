@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Credential } from '../types'
 import { useStore } from '../store/store'
 import { isManuallyExcluded } from '../lib/derive'
 import { CHART_TOOLTIP_DELAY_MS } from '../lib/tooltipInteraction'
+import { hasOpenDialog, isCompositionEvent, isEditingTarget, isPlainShortcut } from '../lib/keyboard'
 import { Chip, HoverCard, Icon, PlanMark, SecretName, Select, useNow } from '../components/ui'
 import { CredentialPager, credentialPage } from '../components/credentials/CredentialPager'
 import { formatDateTimePrecise, formatDuration, formatNumber } from '../lib/format'
@@ -132,8 +133,9 @@ function AccountCard({ credential, stats, days }: {
       <span className="stats-account-outcomes">
         {OUTCOMES.map(([key, label, color]) => (
           <HoverCard key={key} compact showDelay={CHART_TOOLTIP_DELAY_MS} content={`${label} ${stats?.[key] ?? 0} 轮`}>
-            <span aria-label={`${label} ${stats?.[key] ?? 0} 轮`}>
-              <i style={{ backgroundColor: color }} />{stats?.[key] ?? 0}
+            <span className="stats-outcome-item" aria-label={`${label} ${stats?.[key] ?? 0} 轮`}>
+              <i style={{ backgroundColor: color }} aria-hidden="true" />
+              {stats?.[key] ?? 0}
             </span>
           </HoverCard>
         ))}
@@ -158,6 +160,16 @@ export function Statistics() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('downshift')
   const [page, setPage] = useState(0)
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (hasOpenDialog() || isEditingTarget(event.target) || isCompositionEvent(event) || !isPlainShortcut(event, '/')) return
+      event.preventDefault()
+      window.setTimeout(() => searchRef.current?.focus(), 0)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
   const now = useNow()
   const models = useMemo(() => [...new Set(targets.map((target) => target.model))].sort(), [targets])
   const activeModel = models.includes(model) ? model : ''
@@ -243,7 +255,35 @@ export function Statistics() {
         <div className="stats-controls stats-account-filters">
           <div className="search">
             <Icon.Search />
-            <input type="search" aria-label="搜索统计账号" placeholder="搜索账号" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} />
+            <input
+              ref={searchRef}
+              type="text"
+              role="searchbox"
+              aria-label="搜索统计账号"
+              placeholder="搜索账号"
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setPage(0) }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (event.currentTarget.value) { setQuery(''); setPage(0) }
+                  else event.currentTarget.blur()
+                }
+              }}
+            />
+            {query ? (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => { setQuery(''); setPage(0) }}
+                aria-label="清除搜索"
+              >
+                <Icon.Close />
+              </button>
+            ) : (
+              <kbd className="search-kbd" aria-hidden="true">/</kbd>
+            )}
           </div>
           <Select
             ariaLabel="账号统计排序"

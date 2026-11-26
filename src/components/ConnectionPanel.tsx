@@ -11,6 +11,7 @@ export function ConnectionPanel() {
   const authenticated = useStore((state) => state.authenticated)
   const lastUpdated = useStore((state) => state.lastUpdatedAt)
   const [key, setKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
   const [remember, setRemember] = useState(hasRememberedManagementKey)
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -47,10 +48,22 @@ export function ConnectionPanel() {
         } finally { setSubmitting(false) }
       }}>
         <label htmlFor="management-key">管理密钥</label>
-        <input id="management-key" className="input login-key" type="password" autoComplete="off"
-          autoFocus value={key} onChange={(event) => { setKey(event.target.value); setFormError('') }}
-          placeholder="请输入管理员密钥" disabled={submitting || connecting}
-          aria-invalid={!!formError || (!!error && !connecting)} aria-describedby="login-message" />
+        <div className="login-key-wrap">
+          <input id="management-key" className="input login-key" type={showKey ? 'text' : 'password'} autoComplete="off"
+            autoFocus value={key} onChange={(event) => { setKey(event.target.value); setFormError('') }}
+            placeholder="请输入管理员密钥" disabled={submitting || connecting}
+            aria-invalid={!!formError || (!!error && !connecting)} aria-describedby="login-message" />
+          <button
+            type="button"
+            className="icon-btn login-key-toggle"
+            aria-label={showKey ? '隐藏管理密钥' : '显示管理密钥'}
+            aria-pressed={showKey}
+            disabled={submitting || connecting}
+            onClick={() => setShowKey((visible) => !visible)}
+          >
+            {showKey ? <Icon.EyeOff /> : <Icon.Eye />}
+          </button>
+        </div>
         <label className="login-remember">
           <input type="checkbox" checked={remember} onChange={(event) => { setRemember(event.target.checked); if (!event.target.checked) forgetRememberedManagementKey() }} disabled={submitting || connecting} />
           <span>记住管理员密钥</span>

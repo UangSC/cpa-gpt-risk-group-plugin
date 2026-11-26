@@ -17,8 +17,8 @@ foreach ($taskEntry in @{ pluginID = $taskPluginId; version = $taskVersion }.Get
 }
 $taskRegistry = Get-Content -LiteralPath (Join-Path $taskRoot 'store/registry.json') -Raw -Encoding utf8 | ConvertFrom-Json
 $taskStorePlugin = $taskRegistry.plugins[0]
-if ($taskRegistry.schema_version -ne 1 -or $taskStorePlugin.id -ne $taskPluginId) {
-    throw 'store/registry.json 的 schema_version 或插件 ID 与 package.json 不一致。'
+if ($taskRegistry.schema_version -ne 1 -or $taskStorePlugin.id -ne $taskPluginId -or ($taskStorePlugin.version -and $taskStorePlugin.version -ne $taskVersion)) {
+    throw 'store/registry.json 的 schema_version、插件 ID 或 version 与 package.json 不一致。'
 }
 $taskExpectedRepo = [string]$taskStorePlugin.repository
 $taskPackageRepo = ([string]$taskPackage.repository.url) -replace '^git\+', '' -replace '\.git$', ''

@@ -1,5 +1,61 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import type { LightTone } from '../../lib/derive'
+
+/**
+ * Lightweight GPU-accelerated sliding pill indicator for Segmented and Nav controls.
+ * Snaps without animation on initial mount (zero FOUC/jump), then glides smoothly on key changes.
+ */
+export function useSlidingIndicator<T extends HTMLElement>(
+  containerRef: RefObject<T | null>,
+  activeKey: string | number | null | undefined,
+  selector = "[aria-pressed='true'], [aria-current='page']",
+) {
+  const [metric, setMetric] = useState<{ x: number; w: number; ready: boolean; animate: boolean }>({
+    x: 0,
+    w: 0,
+    ready: false,
+    animate: false,
+  })
+  const prevKeyRef = useRef(activeKey)
+
+  useLayoutEffect(() => {
+    const root = containerRef.current
+    if (!root) return
+
+    const measure = (allowAnimate: boolean) => {
+      const target = root.querySelector<HTMLElement>(selector)
+      if (!target || target.offsetWidth === 0) {
+        setMetric((prev) => (prev.ready ? { ...prev, ready: false, animate: false } : prev))
+        return
+      }
+      let x = 0
+      let cur: HTMLElement | null = target
+      while (cur && cur !== root) {
+        x += cur.offsetLeft
+        cur = cur.offsetParent as HTMLElement | null
+      }
+      const w = target.offsetWidth
+      setMetric((prev) => {
+        if (prev.ready && prev.x === x && prev.w === w && prev.animate === allowAnimate) return prev
+        return { x, w, ready: true, animate: prev.ready && allowAnimate }
+      })
+    }
+
+    const keyChanged = prevKeyRef.current !== activeKey
+    prevKeyRef.current = activeKey
+    measure(keyChanged)
+
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => measure(false))
+    ro.observe(root)
+    for (const btn of root.querySelectorAll<HTMLElement>('button')) {
+      ro.observe(btn)
+    }
+    return () => ro.disconnect()
+  }, [containerRef, activeKey, selector])
+
+  return metric
+}
 
 export function Dot({ tone }: { tone: LightTone }) {
   return <span className={`dot dot-${tone}`} aria-hidden="true" />
@@ -63,7 +119,7 @@ export function Switch({
 export interface SegmentedOption<T extends string> {
   disabled?: boolean
   value: T
-  label: string
+  label: ReactNode
   count?: number
   tone?: LightTone
 }
@@ -73,14 +129,38 @@ export function Segmented<T extends string>({
   value,
   onChange,
   ariaLabel,
+  className,
 }: {
   options: SegmentedOption<T>[]
   value: T
   onChange: (next: T) => void
   ariaLabel: string
+  className?: string
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const pill = useSlidingIndicator(ref, value)
+
   return (
-    <div className="segmented" role="group" aria-label={ariaLabel}>
+    <div
+      ref={ref}
+      className={`segmented${className ? ` ${className}` : ''}`}
+      data-sliding={pill.ready ? 'true' : undefined}
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {pill.ready && (
+        <span
+          className="sliding-pill"
+          data-animate={pill.animate ? 'true' : undefined}
+          aria-hidden="true"
+          style={
+            {
+              '--pill-x': `${pill.x}px`,
+              '--pill-w': `${pill.w}px`,
+            } as CSSProperties
+          }
+        />
+      )}
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -120,6 +200,12 @@ export function useNow(intervalMs = 30_000, enabled = true) {
   return now
 }
 
+const QUOTA_WINDOW_LABELS: Record<string, string> = {
+  '5h': '5h',
+  '7d': '周限',
+  '30d': '月限',
+}
+
 export function QuotaMeter({
   windows,
   threshold,
@@ -138,7 +224,7 @@ export function QuotaMeter({
         return (
           <div className="quota-item" key={w.key}>
             {/* Label sits before the track, so the bar itself takes the whole row width. */}
-            <span className="quota-key">{w.key === '7d' ? '周限' : w.key}</span>
+            <span className="quota-key">{QUOTA_WINDOW_LABELS[w.key] ?? w.key}</span>
             <div className="quota-bar">
               <span
                 className={value == null ? 'is-unknown' : low ? 'is-low' : mid ? 'is-mid' : ''}

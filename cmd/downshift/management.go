@@ -31,10 +31,10 @@ type managementResponse struct {
 func managementRegistration() (any, error) {
 	routes := []map[string]string{}
 	// CPA plugin management routes are fixed paths and reject :param / *wildcard.
-	for _, item := range [][2]string{{"GET", "/snapshot"}, {"POST", "/checks"}, {"POST", "/quota/refresh"}, {"GET", "/tasks"}, {"POST", "/tasks/cancel"}, {"POST", "/sync"}, {"PUT", "/settings"}, {"PUT", "/routing"}, {"POST", "/exclusions"}, {"PUT", "/status"}, {"POST", "/history/clear"}} {
+	for _, item := range [][2]string{{"GET", "/snapshot"}, {"POST", "/checks"}, {"POST", "/quota/refresh"}, {"GET", "/tasks"}, {"POST", "/tasks/cancel"}, {"POST", "/sync"}, {"POST", "/verdict"}, {"PUT", "/settings"}, {"PUT", "/routing"}, {"POST", "/exclusions"}, {"PUT", "/status"}, {"POST", "/history/clear"}} {
 		routes = append(routes, map[string]string{"method": item[0], "path": apiPrefix + item[1]})
 	}
-	resources := []map[string]string{{"path": "/ui", "menu": "Codex 风控检测与分类", "description": "真实 Codex 凭证巡检、分类与优先级路由"}}
+	resources := []map[string]string{{"path": "/ui", "menu": "Codex 风控检测与分类", "description": "Codex 凭证糖果题、模型指纹与画鹈鹕 SVG 巡检、分类及路由管理"}}
 	err := fs.WalkDir(web.Assets(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -78,7 +78,7 @@ func (p *plugin) management(raw []byte) (any, error) {
 	if service == nil {
 		return jsonResponse(503, "插件服务尚未初始化"), nil
 	}
-	adapter.RememberManagementKey(req.Headers.Get("Authorization"))
+	adapter.RememberManagementKey(req.Headers)
 	u := &url.URL{Path: req.Path, RawQuery: req.Query.Encode()}
 	httpReq, err := http.NewRequestWithContext(context.Background(), req.Method, u.String(), bytes.NewReader(req.Body))
 	if err != nil {

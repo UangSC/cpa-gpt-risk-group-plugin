@@ -1,12 +1,12 @@
-import type { FingerprintEvidence } from '../types'
-import { Chip, Collapse } from './ui'
+import type { FingerprintEvidence } from '../../types'
+import { fingerprintThresholdLabel } from '../../lib/inspectionResult'
+import { Chip, Collapse } from '../ui'
 
 function probabilityLabel(value: number | null | undefined): string {
   return value == null ? '未计算' : `${(value * 100).toFixed(2)}%`
 }
 
 export function FingerprintEvidencePanel({ evidence }: { evidence: FingerprintEvidence }) {
-  const threshold = evidence.threshold ?? 0.9
   const challenges = new Set(evidence.samples.map((sample) => sample.challengeId)).size
   const candidates = evidence.candidates ?? []
   return (
@@ -29,7 +29,7 @@ export function FingerprintEvidencePanel({ evidence }: { evidence: FingerprintEv
         <dt>最高候选概率</dt>
         <dd>{probabilityLabel(evidence.probability)}</dd>
         <dt>正常门槛</dt>
-        <dd>目标参考匹配，且目标概率严格大于 {(threshold * 100).toFixed(0)}%</dd>
+        <dd>目标参考匹配，且目标概率严格大于 {fingerprintThresholdLabel(evidence.threshold)}</dd>
         <dt>数字序列均值</dt>
         <dd>{evidence.mean == null ? '未计算' : evidence.mean.toFixed(3)}</dd>
       </dl>

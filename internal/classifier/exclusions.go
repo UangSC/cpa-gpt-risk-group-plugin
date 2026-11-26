@@ -7,8 +7,12 @@ import (
 	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
-func excludedFromInspection(credential cpa.Credential, record *Record) bool {
-	return credential.Disabled || (record != nil && record.InspectionExcluded)
+func isFreePlan(plan string) bool {
+	return strings.EqualFold(strings.TrimSpace(plan), "free")
+}
+
+func excludedFromInspection(credential cpa.Credential, record *Record, settings Settings) bool {
+	return credential.Disabled || (record != nil && record.InspectionExcluded) || (isFreePlan(credential.Plan) && !settings.InspectFreeAccounts)
 }
 
 // SetExclusions 只改变插件的巡检范围，不触碰 CPA 凭证字段或历史依据。

@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { clearInspectionHistory } from '../store/historyActions'
-import { useStore } from '../store/store'
+import { clearInspectionHistory } from '../../store/historyActions'
+import { useStore } from '../../store/store'
 import { SettingsPanel } from './SettingsPanel'
-import { Icon, Modal } from './ui'
+import { Icon, Modal } from '../ui'
 
 export function ClearHistoryPanel() {
   const connected = useStore((state) => state.connection === 'connected')

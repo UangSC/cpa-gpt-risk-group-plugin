@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import { useSettingsEditor } from '../store/settingsEditor'
-import { useStore } from '../store/store'
-import { analyzePrefixes, buildModelName, DEFAULT_PREFIXES, stripGroupPrefix } from '../lib/prefix'
-import { Chip, Icon, Segmented } from './ui'
+import { useSettingsEditor } from '../../store/settingsEditor'
+import { useStore } from '../../store/store'
+import { analyzePrefixes, buildModelName, DEFAULT_PREFIXES, stripGroupPrefix } from '../../lib/prefix'
+import { Chip, Icon, Segmented } from '../ui'
 import { SettingsPanel as Panel } from './SettingsPanel'
 
 export function PrefixEditor({ wide = false }: { wide?: boolean }) {

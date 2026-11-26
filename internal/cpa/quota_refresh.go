@@ -119,13 +119,8 @@ func parseQuotaUsage(raw []byte, observed time.Time) (Quota, error) {
 		if w == nil || w.Used == nil || math.IsNaN(*w.Used) || math.IsInf(*w.Used, 0) || *w.Used < 0 || *w.Used > 100 {
 			continue
 		}
-		key := ""
-		switch w.Duration {
-		case 18000:
-			key = "5h"
-		case 604800:
-			key = "7d"
-		default:
+		key := quotaWindowKeyFromSeconds(w.Duration)
+		if key == "" {
 			continue
 		}
 		var reset time.Time
@@ -142,6 +137,10 @@ func parseQuotaUsage(raw []byte, observed time.Time) (Quota, error) {
 		q.Windows = append(q.Windows, QuotaWindow{Key: key, RemainingPercent: &remaining, ResetsAt: &at})
 		q.Status = "known"
 	}
+	q.Windows = sortAndDedupeQuotaWindows(q.Windows)
+	if len(q.Windows) == 0 {
+		q.Status = "unknown"
+	}
 	if body.RateLimit.Reached {
 		q.Status = "exhausted"
 	}
@@ -151,7 +150,7 @@ func parseQuotaUsage(raw []byte, observed time.Time) (Quota, error) {
 		}
 	}
 	if q.Status == "unknown" {
-		return Quota{}, errors.New("额度接口没有可确认的五小时或七日额度")
+		return Quota{}, errors.New("额度接口没有可确认的五小时、七日或月度额度")
 	}
 	return q, nil
 }
@@ -200,7 +199,7 @@ func usableRefreshedQuota(q Quota, now time.Time) Quota {
 	}
 	valid := Quota{Windows: []QuotaWindow{}, Status: "known", ObservedAt: q.ObservedAt}
 	for _, w := range q.Windows {
-		if (w.Key != "5h" && w.Key != "7d") || w.RemainingPercent == nil || w.ResetsAt == nil || math.IsNaN(*w.RemainingPercent) || math.IsInf(*w.RemainingPercent, 0) || *w.RemainingPercent < 0 || *w.RemainingPercent > 100 {
+		if !isValidQuotaWindowKey(w.Key) || w.RemainingPercent == nil || w.ResetsAt == nil || math.IsNaN(*w.RemainingPercent) || math.IsInf(*w.RemainingPercent, 0) || *w.RemainingPercent < 0 || *w.RemainingPercent > 100 {
 			continue
 		}
 		reset, err := time.Parse(time.RFC3339Nano, *w.ResetsAt)
@@ -209,7 +208,10 @@ func usableRefreshedQuota(q Quota, now time.Time) Quota {
 		}
 		remaining, at := *w.RemainingPercent, *w.ResetsAt
 		valid.Windows = append(valid.Windows, QuotaWindow{Key: w.Key, RemainingPercent: &remaining, ResetsAt: &at})
-		if remaining == 0 {
+	}
+	valid.Windows = sortAndDedupeQuotaWindows(valid.Windows)
+	for _, w := range valid.Windows {
+		if *w.RemainingPercent == 0 {
 			valid.Status = "exhausted"
 		}
 	}

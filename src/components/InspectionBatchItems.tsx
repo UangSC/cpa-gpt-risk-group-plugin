@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { roundTone } from '../lib/derive'
 import { formatClock } from '../lib/format'
 import { RUN_STATE_LABEL, type HistoryBatchEntry } from '../lib/historyBatches'
-import { inspectionResult } from '../lib/inspectionResult'
+import { inspectionResult, resolvedRoundReason, roundErrorInfo } from '../lib/inspectionResult'
 import { REASON_LABEL, testLabel } from '../lib/rules'
 import type { InspectionRound } from '../types'
 import { Chip, Dot, PlanMark, SecretName, type ChipTone } from './ui'
@@ -20,8 +20,24 @@ function RoundDescription({ round, targetModel, fallback }: { round: InspectionR
   if (result?.kind === 'candy') {
     return <>巡检成功：{result.answer == null ? '未提取到数字答案' : <code className="inspection-answer">{`{"ANSWER": ${result.answer}}`}</code>}</>
   }
-  if (result?.kind === 'request-error' && result.method === 'candy') {
-    return <strong className="inspection-request-error">巡检失败：{result.status == null ? '请求异常' : `错误码 ${result.status}`}</strong>
+  if (result?.kind === 'pelican') {
+    if (result.judgedVerdict === 'normal' || round.outcome === 'normal') return <>画鹈鹕人工判定：<strong>正常</strong></>
+    if (result.judgedVerdict === 'downshift' || round.outcome === 'downshift') return <>画鹈鹕人工判定：<strong className="inspection-request-error">风控</strong></>
+    return <>已生成鹈鹕 SVG 动画，待肉眼判定分组</>
+  }
+  if (result?.kind === 'request-error') {
+    return (
+      <strong className="inspection-request-error">
+        巡检失败：
+        {result.codesSummary
+          ? `请求返回 ${result.codesSummary}`
+          : result.lastCodeLabel
+            ? result.lastCodeLabel
+            : result.status == null
+              ? '请求异常'
+              : `错误码 HTTP ${result.status}`}
+      </strong>
+    )
   }
   return fallback
 }
@@ -37,7 +53,12 @@ function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: n
   const fallback = item?.state === 'done' ? '检测已完成，详细证据不在当前保留历史中' : item?.state === 'skipped' ? '本次已跳过此凭证'
     : item?.state === 'cancelled' ? '该凭证检测已取消' : item?.state === 'failed' ? '本次未取得完整检测结果' : '等待完整检测结果'
   const requesting = item?.state === 'running' && item.attempt > 0
-  const note = round ? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${round.reason}` : requesting ? '' : item?.note ?? fallback
+  const note = round ? `${REASON_LABEL[round.reasonCode] ?? round.reasonCode} — ${resolvedRoundReason(round)}` : requesting ? '' : item?.note ?? fallback
+  const noteIsError = Boolean(
+    round
+      ? round.outcome === 'blocked' || round.outcome === 'downshift' || roundErrorInfo(round).hasError
+      : item?.state === 'failed',
+  )
   const retryTime = item?.retryAt ? Date.parse(item.retryAt) : NaN
   const retrySeconds = item?.state === 'retrying' && Number.isFinite(retryTime) ? Math.max(0, Math.ceil((retryTime - now) / 1000)) : null
   const testNames = round ? testLabel(round.tests) : item?.currentTest ? testLabel([item.currentTest]) : null
@@ -63,7 +84,7 @@ function EntryContent({ entry, now, recent }: { entry: HistoryBatchEntry; now: n
       </span>
       <span className={recent ? 'recent-entry-result' : undefined}><span className="history-sub">{recent
         ? <>{badges}{round ? <RoundDescription round={round} targetModel={model} fallback={note} /> : note}</>
-        : <><span className="mono">{model}</span>{note && ` · ${note}`}</>}</span></span>
+        : <><span className="mono">{model}</span>{note && <> · <span className={noteIsError ? 'inspection-request-error' : undefined}>{note}</span></>}</>}</span></span>
     </span>
     <span className="history-side">
       {round ? <time dateTime={round.finishedAt}>{formatClock(round.finishedAt).slice(0, 5)}</time>

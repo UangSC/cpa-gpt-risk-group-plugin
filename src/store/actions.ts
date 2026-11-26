@@ -1,7 +1,7 @@
 // 前端操作编排：检查资格、确认写入权限并提交 CPA 管理请求；不在浏览器推理。
 import { backend, type RoutingRequest } from '../api'
 import type { Credential, InspectionTask, Settings, Target, InspectionConfirmation } from '../types'
-import { isManuallyExcluded, lowestQuota } from '../lib/derive'
+import { isFreeSkipped, isManuallyExcluded, lowestQuota } from '../lib/derive'
 import { useStore } from './store'
 import { refreshSnapshot } from './live'
 import { activeInspectionCredentialIds } from './exclusions'
@@ -22,6 +22,7 @@ export function evaluateEligibility(
   if (!credential) return { runnable: false, note: '凭证已不存在' }
   if (credential.disabled) return { runnable: false, note: '该凭证已关闭，不参与巡检' }
   if (isManuallyExcluded(credential)) return { runnable: false, note: '该凭证不参与巡检，请先从侧边抽屉恢复参与' }
+  if (isFreeSkipped(credential, settings)) return { runnable: false, note: 'Free 账号默认不参与巡检，可在设置中强制开启' }
   if (busySets ? busySets.togglingStatus.has(credential.id) : state.togglingStatus.includes(credential.id)) return { runnable: false, note: '该凭证开启状态正在切换' }
   if (busySets ? busySets.excluding.has(credential.id) : state.excluding.includes(credential.id)) return { runnable: false, note: '该凭证的参与状态正在更新' }
   if (credential.auth === 'expired') return { runnable: false, note: '认证失效：需要重新登录，不属于模型风控' }
@@ -92,7 +93,25 @@ export async function startInspection(scope: InspectionTask['scope'], targetIds?
     const current = useStore.getState()
     if (current.connection !== 'connected' || current.starting || current.settingsSaving || current.pendingSettingsConfirmation || current.inspectionConfirmation) return null
     const eligible = eligibleIds(requested)
-    if (!eligible.length) { notifyError('没有可巡检的凭证', new Error('不参与巡检或状态不满足条件的凭证不会执行')); return null }
+    if (!eligible.length) {
+      const requestedCreds = requested
+        .map((id) => current.credentials.find((item) => item.id === id))
+        .filter((item): item is Credential => Boolean(item))
+      const onlyFreeSkipped =
+        requestedCreds.length > 0 &&
+        requestedCreds.every(
+          (item) => !item.disabled && !isManuallyExcluded(item) && isFreeSkipped(item, current.settings),
+        )
+      notifyError(
+        '没有可巡检的凭证',
+        new Error(
+          onlyFreeSkipped
+            ? 'Free 账号默认不参与巡检，可在「设置 → 巡检与重试」中开启强制巡检 Free 账号'
+            : '不参与巡检或状态不满足条件的凭证不会执行',
+        ),
+      )
+      return null
+    }
     const pending = confirmation(scope, eligible, requested.length)
     if (skip && currentManagementKey() === requestKey && manualWritePolicy(state.settings) === manualWritePolicy(current.settings)) {
       return await submitInspection(pending, false, false)
@@ -175,6 +194,109 @@ export async function resyncCredential(id: string) {
     useStore.getState().notify({ tone: response.status === 'synced' ? 'success' : 'danger', title: response.status === 'synced' ? '分组已同步' : '分组同步失败', detail: response.message ?? undefined })
   } catch (error) { notifyError('分组同步失败', error) }
   finally { useStore.setState((state) => ({ syncing: state.syncing.filter((value) => value !== id) })) }
+}
+
+export async function judgePelicanVerdict(
+  credentialId: string,
+  verdict: 'normal' | 'downshift',
+  roundId?: string,
+  modelOverride?: string,
+): Promise<boolean> {
+  const state = useStore.getState()
+  if (state.connection !== 'connected' || state.judging.includes(credentialId) || state.syncing.includes(credentialId)) return false
+  if (activeInspectionCredentialIds(state).includes(credentialId)) {
+    state.notify({ tone: 'warning', title: '无法提交手动分组', detail: '该凭证仍在巡检任务中，请等待完成后再操作。' })
+    return false
+  }
+  const requestKey = currentManagementKey()
+  const model = modelOverride ?? state.settings.inspectionModel
+  const prevTargets = state.targets
+  const prevCredentials = state.credentials
+  const nowIso = new Date().toISOString()
+
+  useStore.setState((current) => ({
+    judging: [...new Set([...current.judging, credentialId])],
+    mutationVersion: current.mutationVersion + 1,
+    targets: current.targets.map((target) => {
+      if (target.credentialId !== credentialId || target.model !== model) return target
+      const targetRoundId =
+        roundId ?? target.rounds.find((r) => Boolean(r.evidence.pelican?.svg))?.id
+      if (!targetRoundId) return target
+      return {
+        ...target,
+        verdict,
+        blocked: null,
+        rounds: target.rounds.map((r) =>
+          r.id === targetRoundId && r.evidence.pelican
+            ? {
+                ...r,
+                outcome: verdict,
+                reasonCode: verdict === 'normal' ? 'pelican-judged-normal' : 'pelican-judged-downshift',
+                reason: verdict === 'normal' ? '人工肉眼判定：正常（鹈鹕 SVG 动画）' : '人工肉眼判定：风控（鹈鹕 SVG 动画）',
+                evidence: {
+                  ...r.evidence,
+                  pelican: {
+                    ...r.evidence.pelican,
+                    judgedVerdict: verdict,
+                    judgedAt: nowIso,
+                  },
+                },
+              }
+            : r,
+        ),
+      }
+    }),
+    credentials: current.credentials.map((cred) =>
+      cred.id === credentialId ? { ...cred, group: verdict } : cred,
+    ),
+  }))
+  try {
+    const response = await backend.judgeVerdict({ credentialId, model, roundId, verdict })
+    if (currentManagementKey() !== requestKey) return false
+    await refreshSnapshot(true)
+    if (currentManagementKey() !== requestKey) return true
+    const latestSettings = useStore.getState().settings
+    const groupLabel = verdict === 'normal' ? '正常' : '风控'
+    if (response.status === 'failed') {
+      useStore.getState().notify({
+        tone: 'warning',
+        title: `已标记为${groupLabel}，但 CPA 分组同步失败`,
+        detail: response.message ?? '可在概览顶部点击重试同步。',
+      })
+    } else if (latestSettings.routing.mode === 'none') {
+      useStore.getState().notify({
+        tone: 'success',
+        title: `已手动归为${groupLabel}`,
+        detail: '当前为「仅检测」模式，已保存人工判定结论，未修改 CPA 前缀与优先级。',
+      })
+    } else if (latestSettings.routing.mode === 'prefix') {
+      const pfx = verdict === 'normal' ? latestSettings.prefixes.normal : latestSettings.prefixes.downshift
+      useStore.getState().notify({
+        tone: 'success',
+        title: `已归入${groupLabel}组并同步 CPA`,
+        detail: pfx ? `已应用模型前缀 ${pfx}/` : '已保持原始模型名称（无前缀）',
+      })
+    } else {
+      const prio = latestSettings.routing.groups[verdict].priority
+      useStore.getState().notify({
+        tone: 'success',
+        title: `已归入${groupLabel}组并同步 CPA`,
+        detail: `已按${groupLabel}组调度优先级（${prio}）更新凭证。`,
+      })
+    }
+    return true
+  } catch (error) {
+    if (currentManagementKey() === requestKey) {
+      useStore.setState({ targets: prevTargets, credentials: prevCredentials })
+      void refreshSnapshot(true)
+      notifyError('手动判定分组失败', error)
+    }
+    return false
+  } finally {
+    useStore.setState((current) => ({
+      judging: current.judging.filter((id) => id !== credentialId),
+    }))
+  }
 }
 export async function setCredentialDisabled(credentialId: string, disabled: boolean): Promise<boolean> {
   const state = useStore.getState()

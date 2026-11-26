@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
@@ -19,7 +20,12 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := Snapshot{Credentials: []Credential{}, Targets: []Target{}, Settings: clone(s.state.Settings), Tasks: clone(s.state.Tasks), Source: "live", SourceDetail: "来自 CPA 官方凭证与运行状态接口；未提供的额度或会话状态显示未知。模型指纹以三次数字挑战与固定参考库计算归因，目标参考概率严格高于 90% 才判正常。定时巡检时区：Asia/Shanghai。", Capabilities: Capabilities{RoutingStrategy: strategy, WeightEditingEnabled: strategy == "weighted-round-robin", FingerprintAvailable: fingerprint.Available(), QuotaRefreshAvailable: s.quotaRefreshAvailable()}}
+	out := Snapshot{Credentials: []Credential{}, Targets: []Target{}, Settings: clone(s.state.Settings), Tasks: clone(s.state.Tasks), Source: "live", Capabilities: Capabilities{RoutingStrategy: strategy, WeightEditingEnabled: strategy == "weighted-round-robin", FingerprintAvailable: fingerprint.Available(), QuotaRefreshAvailable: s.quotaRefreshAvailable()}}
+	freePolicyDetail := "Free 账号默认不参与巡检（可在设置中强制开启）"
+	if out.Settings.InspectFreeAccounts {
+		freePolicyDetail = "已强制开启 Free 账号参与巡检"
+	}
+	out.SourceDetail = fmt.Sprintf("来自 CPA 官方凭证与运行状态接口；未提供的额度或会话状态显示未知。模型指纹采用三次数字挑战，目标参考匹配且目标概率严格大于 %s 才判正常。%s。定时巡检时区：Asia/Shanghai。", fingerprintThresholdLabel(out.Settings.fingerprintThreshold()), freePolicyDetail)
 	out.ConfigChangesRevision = configurationFingerprint(s.state.Settings, false)
 	if provider, ok := s.adapter.(cpa.HeaderProfileProvider); ok {
 		out.RequestHeaderProfile = provider.RequestHeaderProfile(ctx)

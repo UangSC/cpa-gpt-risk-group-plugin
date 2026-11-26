@@ -9,7 +9,7 @@ import { APIError } from '../api/plugin'
 import { needsScheduledConsent, sameInspectionRisk } from '../lib/inspectionConsent'
 
 export type VerdictFilter = 'all' | 'normal' | 'downshift' | 'uncertain' | 'untested' | 'attention'
-export type SortKey = 'status' | 'recent' | 'quota' | 'name'
+export type SortKey = 'pelican' | 'status' | 'recent' | 'quota' | 'name'
 export type TabKey = 'overview' | 'statistics' | 'history' | 'settings'
 export interface Filters { search: string; verdict: VerdictFilter; sort: SortKey | null }
 type ConnectionState = 'connecting' | 'connected' | 'error' | 'stopped'
@@ -33,8 +33,10 @@ interface AppState {
   tab: TabKey
   sourceDetail: string
   detail: { targetId: string; roundId: string | null } | null
+  pelicanLightbox: { credentialId: string; roundId: string | null } | null
   runPanelOpen: boolean
   syncing: string[]
+  judging: string[]
   quotaRefreshing: string[]
   starting: boolean
   startingCredentialIds: string[]
@@ -63,6 +65,8 @@ interface AppState {
   ensureTargetsForModel: (model: string) => void
   openDetail: (targetId: string, roundId?: string | null) => void
   closeDetail: () => void
+  openPelicanLightbox: (credentialId: string, roundId?: string | null) => void
+  closePelicanLightbox: () => void
   setRunPanel: (open: boolean) => void
   dismissToast: (id: string) => void
   notify: (toast: Omit<Toast, 'id'>) => void
@@ -95,7 +99,7 @@ export const useStore = create<AppState>((set, get) => ({
   settingsDraft: null, settingsSaving: false, pendingTab: null, tasks: [],
   capabilities: { ...EMPTY_CAPABILITIES }, connection: 'connecting', connectionError: '', authenticated: false, lastUpdatedAt: null,
   selected: [], filters: { search: '', verdict: 'all', sort: null }, toasts: [], tab: 'overview',
-  sourceDetail: '', detail: null, runPanelOpen: false, syncing: [], quotaRefreshing: [], starting: false, startingCredentialIds: [], mutationVersion: 0,
+  sourceDetail: '', detail: null, pelicanLightbox: null, runPanelOpen: false, syncing: [], judging: [], quotaRefreshing: [], starting: false, startingCredentialIds: [], mutationVersion: 0,
   configChangesRevision: '', exclusionDrawerOpen: false, excluding: [], togglingStatus: [],
   inspectionConfirmation: null, inspectionConfirmError: '', pendingSettingsConfirmation: null, settingsConfirmError: '',
   pendingWeightZero: null,
@@ -110,6 +114,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (snapshot.source !== 'live' || !Array.isArray(snapshot.credentials) || !Array.isArray(snapshot.targets) || !snapshot.settings) throw new Error('CPA 插件返回的状态格式无效')
     const settings = {
       ...snapshot.settings, reasoningEffort: snapshot.settings.reasoningEffort ?? DEFAULT_SETTINGS.reasoningEffort,
+      inspectFreeAccounts: Boolean(snapshot.settings.inspectFreeAccounts),
+      fingerprintThresholdPercent: snapshot.settings.fingerprintThresholdPercent ?? DEFAULT_SETTINGS.fingerprintThresholdPercent,
       failureRule: { ...DEFAULT_SETTINGS.failureRule, ...snapshot.settings.failureRule },
       headerOverrides: snapshot.settings.headerOverrides ?? {},
       pagination: { ...DEFAULT_SETTINGS.pagination, ...snapshot.settings.pagination },
@@ -230,6 +236,8 @@ export const useStore = create<AppState>((set, get) => ({
     }))] })
   },
   openDetail: (targetId, roundId = null) => set({ detail: { targetId, roundId } }), closeDetail: () => set({ detail: null }),
+  openPelicanLightbox: (credentialId, roundId = null) => set({ pelicanLightbox: { credentialId, roundId } }),
+  closePelicanLightbox: () => set({ pelicanLightbox: null }),
   setRunPanel: (open) => set({ runPanelOpen: open }),
   setExclusionDrawerOpen: (open) => set({ exclusionDrawerOpen: open }),
   closeInspectionConfirmation: () => { if (!get().starting) set({ inspectionConfirmation: null, inspectionConfirmError: '' }) },
@@ -243,7 +251,6 @@ export const useStore = create<AppState>((set, get) => ({
   notify: (toast) => {
     const id = `toast-${++toastSeq}`
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }].slice(-4) }))
-    globalThis.setTimeout(() => set((state) => ({ toasts: state.toasts.filter((item) => item.id !== id) })), 5200)
   },
 }))
 

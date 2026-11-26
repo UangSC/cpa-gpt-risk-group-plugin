@@ -1,10 +1,11 @@
 import { type RunItemState, type Settings } from '../../types'
-import { lowestQuota, statusOf, type StatusKey, type CredentialView } from '../../lib/derive'
+import { isFreeSkipped, lastRound, lowestQuota, statusOf, type StatusKey, type CredentialView } from '../../lib/derive'
+import { latestCredentialErrorCode, resolvedRoundReason } from '../../lib/inspectionResult'
 import { STATUS_TOOLTIP_DELAY_MS } from '../../lib/tooltipInteraction'
 import { Chip, HoverCard, Icon, QuotaMeter } from '../ui'
 import type { ChipTone } from '../ui/primitives'
 import { useStore } from '../../store/store'
-import { refreshCredentialsQuota } from '../../store/actions'
+import { evaluateEligibility, refreshCredentialsQuota, startInspection } from '../../store/actions'
 import { ExclusionIcon } from '../ExclusionDrawer'
 
 /**
@@ -26,12 +27,15 @@ export interface CardActivity {
   kind: CardActivityKind
   label: string
   chipTone: ChipTone
+  elapsedSec?: number
 }
 
 export interface CredentialRuntime {
   settings: Settings
   connected: boolean
+  starting?: boolean
   inspectingStates: ReadonlyMap<string, RunItemState>
+  inspectingStartedAt?: ReadonlyMap<string, number>
   quotaRefreshingIds: ReadonlySet<string>
   togglingStatusIds: ReadonlySet<string>
   excludingIds: ReadonlySet<string>
@@ -45,7 +49,19 @@ export interface CredentialRuntime {
 
 export function resolveCardActivity(credentialId: string, runtime: CredentialRuntime): CardActivity | null {
   const runState = runtime.inspectingStates.get(credentialId)
-  if (runState === 'running') return { kind: 'inspecting', label: '巡检中', chipTone: 'accent' }
+  if (runState === 'running') {
+    const startedMs = runtime.inspectingStartedAt?.get(credentialId)
+    const elapsedSec =
+      startedMs != null && Number.isFinite(startedMs)
+        ? Math.max(0, Math.floor((runtime.now - startedMs) / 1000))
+        : undefined
+    return {
+      kind: 'inspecting',
+      label: elapsedSec != null && elapsedSec > 0 ? `巡检中 ${elapsedSec}s` : '巡检中',
+      chipTone: 'accent',
+      elapsedSec,
+    }
+  }
   if (runState === 'retrying') return { kind: 'retrying', label: '重试中', chipTone: 'uncertain' }
   if (runState === 'waiting') return { kind: 'waiting', label: '等待空闲', chipTone: 'plain' }
   if (runState === 'queued') return { kind: 'queued', label: '排队中', chipTone: 'plain' }
@@ -72,10 +88,13 @@ export function stop(e: { stopPropagation: () => void }) {
 /** The single four-state status chip used by cards (and the list verdict column). */
 export function StatusPill({ view, size }: { view: CredentialView; size?: 'sm' }) {
   const key = statusOf(view)
+  const latest = lastRound(view.target)
+  const roundDetail = latest ? resolvedRoundReason(latest) : view.reason
   const detail =
     view.attention.find((a) => a.kind === 'sync' || a.kind === 'auth' || a.kind === 'availability')?.detail ??
-    view.reason ??
+    roundDetail ??
     '尚未取得完整检测结果，执行巡检后可点击近况灯查看详情。'
+  const lastErrorCode = key !== 'normal' ? latestCredentialErrorCode(view) : null
   const interactive = key === 'unknown' || key === 'error'
   const Tag = interactive ? 'button' : 'span'
   const pill = (
@@ -96,7 +115,13 @@ export function StatusPill({ view, size }: { view: CredentialView; size?: 'sm' }
       content={
         <>
           <div className="tip-title">{STATUS_TEXT[key]}状态说明</div>
-          <p>{detail}</p>
+          <p className={key === 'error' ? 'tip-v-danger' : undefined}>{detail}</p>
+          {lastErrorCode && (
+            <div className="tip-row tip-error-code-row">
+              <span className="tip-k">最后错误码</span>
+              <span className="tip-v tip-v-danger mono">{lastErrorCode}</span>
+            </div>
+          )}
         </>
       }
     >
@@ -116,18 +141,22 @@ export function GroupCell({ view, settings }: { view: CredentialView; settings: 
     : credential.group
       ? settings.prefixes[credential.group]
       : null
+  const displayText = prefixKnown
+    ? prefix || '无前缀'
+    : settings.routing.mode !== 'prefix'
+      ? label
+      : credential.group
+        ? prefix || '无前缀'
+        : '未分组'
+  const isCodePrefix = Boolean(
+    prefix && (prefixKnown || (settings.routing.mode === 'prefix' && Boolean(credential.group))),
+  )
   return (
     <div className="group-cell is-list">
       <div className="group-line">
         <span className={`group-dot is-${credential.group ?? 'none'}`} aria-hidden="true" />
-        <span className={`group-prefix is-${credential.group ?? 'none'}`}>
-          {prefixKnown
-            ? prefix || '无前缀'
-            : settings.routing.mode !== 'prefix'
-              ? label
-              : credential.group
-                ? prefix || '无前缀'
-                : '未分组'}
+        <span className={`group-prefix is-${credential.group ?? 'none'}${isCodePrefix ? '' : ' is-label'}`}>
+          {displayText}
         </span>
       </div>
     </div>
@@ -193,12 +222,34 @@ export function QuotaCell({
   )
 }
 
+export function FreeSkipChip({ view, settings }: { view: CredentialView; settings: Pick<Settings, 'inspectFreeAccounts'> }) {
+  if (view.credential.disabled || !isFreeSkipped(view.credential, settings)) return null
+  return (
+    <HoverCard compact content="Free 账号默认不参与巡检，可在「设置 → 巡检与重试」中开启强制巡检">
+      <Chip tone="plain">默认免检</Chip>
+    </HoverCard>
+  )
+}
+
 /** Credential-state flag (auth). Quota problems are already expressed in the quota cell. */
 export function StateChips({ view }: { view: CredentialView }) {
   const auth = view.attention.find((a) => a.kind === 'auth')
   if (!auth) return null
+  const lastErrorCode = latestCredentialErrorCode(view)
   return (
-    <HoverCard content={auth.detail}>
+    <HoverCard
+      content={
+        <>
+          <div className="tip-v-danger">{auth.detail}</div>
+          {lastErrorCode && (
+            <div className="tip-row tip-error-code-row">
+              <span className="tip-k">最后错误码</span>
+              <span className="tip-v tip-v-danger mono">{lastErrorCode}</span>
+            </div>
+          )}
+        </>
+      }
+    >
       <Chip tone="downshift">认证失效</Chip>
     </HoverCard>
   )
@@ -209,11 +260,13 @@ export function Actions({
   runtime,
   mode = 'list',
   compact = false,
+  showQuickRun = false,
 }: {
   view: CredentialView
   runtime: CredentialRuntime
   mode?: 'list' | 'pool' | 'card'
   compact?: boolean
+  showQuickRun?: boolean
 }) {
   const isDisabled = view.credential.disabled
   const busy = runtime.inspectingStates.has(view.credential.id)
@@ -225,6 +278,23 @@ export function Actions({
   const excludeDisabled =
     isDisabled || !runtime.connected || excluding || exclusionBusy || toggling || busy || runtime.canChangeParticipation === false
 
+  const eligibility =
+    showQuickRun && view.target
+      ? evaluateEligibility(view.target, runtime.settings, view.credential, {
+          togglingStatus: runtime.togglingStatusIds,
+          excluding: runtime.excludingIds,
+        })
+      : null
+  const canQuickRun =
+    showQuickRun &&
+    Boolean(view.target) &&
+    runtime.connected &&
+    !runtime.starting &&
+    !busy &&
+    !exclusionBusy &&
+    Boolean(eligibility?.runnable)
+  const hasRounds = Boolean(view.target && view.target.rounds.length > 0)
+
   const wrapTooltip = (label: string, node: React.ReactNode) => (
     <HoverCard compact placement="top" content={label}>
       {node}
@@ -233,6 +303,25 @@ export function Actions({
 
   return (
     <div className={`cred-actions is-${mode}${compact ? ' is-compact' : ''}`} onClick={stop}>
+      {showQuickRun &&
+        view.target &&
+        !isDisabled &&
+        wrapTooltip(
+          canQuickRun
+            ? hasRounds
+              ? '单独重测此凭证'
+              : '立即检测此凭证'
+            : eligibility?.note || (busy ? '该凭证正在巡检中' : '当前不可发起检测'),
+          <button
+            type="button"
+            className="icon-btn cred-quick-run"
+            disabled={!canQuickRun}
+            aria-label={hasRounds ? `单独重测 ${view.credential.name}` : `立即检测 ${view.credential.name}`}
+            onClick={() => void startInspection('manual', [view.target!.id])}
+          >
+            {hasRounds ? <Icon.Refresh /> : <Icon.Play />}
+          </button>,
+        )}
       {wrapTooltip(
         isDisabled ? '开启凭证（同步至 CLIProxyAPI）' : '关闭凭证（同步至 CLIProxyAPI，关闭后不参与巡检）',
         <button

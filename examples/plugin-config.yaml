@@ -1,6 +1,8 @@
-# 合并到 CPA 配置中对应的 plugins 节点；请在本机填写管理密钥。
+# 合并到 CPA 配置中对应的 plugins 节点，保留现有插件配置。
+# management_key 可留空，复用 CPA 的 MANAGEMENT_PASSWORD 或已鉴权的管理请求。
 # 完整配置与凭证文件不要提交到源码仓库。
 plugins:
+  enabled: true
   configs:
     cpa-gpt-risk-group-plugin:
       enabled: true

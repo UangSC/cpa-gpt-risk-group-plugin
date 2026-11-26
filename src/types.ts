@@ -11,7 +11,7 @@
  */
 
 /** The behavioural tests this plugin can run. */
-export type TestKind = 'candy' | 'fingerprint' | (string & {})
+export type TestKind = 'candy' | 'fingerprint' | 'pelican' | (string & {})
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
 /**
@@ -30,6 +30,9 @@ export type ReasonCode =
   | 'candy-mismatch'
   | 'fingerprint-anomaly'
   | 'fingerprint-insufficient'
+  | 'pelican-awaiting-judgment'
+  | 'pelican-judged-normal'
+  | 'pelican-judged-downshift'
   | 'repeated-service-errors'
   | 'single-service-error'
   | 'auth-expired'
@@ -45,8 +48,8 @@ export type GroupKey = 'normal' | 'downshift'
 /* ------------------------------------------------------------------ quota */
 
 export interface QuotaWindow {
-  /** Short label as the upstream window reports it, e.g. `5h` / `7d`. */
-  key: '5h' | '7d'
+  /** Short label as the upstream window reports it, e.g. `5h` / `7d` / `30d`. */
+  key: '5h' | '7d' | '30d'
   /** Remaining quota percentage, 0–100. `null` means the upstream did not report it. */
   remainingPercent: number | null
   resetsAt: string | null
@@ -91,6 +94,19 @@ export interface CandyEvidence {
   matched: boolean
   /** Why formatting differences were accepted or not; shown verbatim in the evidence sheet. */
   formatNote: string
+}
+
+export interface PelicanEvidence {
+  promptId: string
+  question: string
+  svg?: string
+  svgBytes: number
+  svgPruned?: boolean
+  rawSnippet?: string
+  strictFormat: boolean
+  formatNote: string
+  judgedVerdict?: GroupKey
+  judgedAt?: string
 }
 
 export interface FingerprintSample {
@@ -155,6 +171,7 @@ export interface RoundEvidence {
   tests: TestKind[]
   candy?: CandyEvidence
   fingerprint?: FingerprintEvidence
+  pelican?: PelicanEvidence
   serviceError?: ServiceErrorEvidence
   attempts: RequestAttempt[]
   errors: { at: string; code: number; message: string }[]
@@ -345,6 +362,8 @@ export interface Settings {
   prefixes: PrefixSettings
   routing: RoutingSettings
   inspectionMethod: TestKind
+  inspectFreeAccounts: boolean
+  fingerprintThresholdPercent: number
   retry: RetryPolicy
   /** 单轮达到请求阈值，或连续窗口内各轮以 502/503/429 失败时归为风控。 */
   failureRule: { windowRounds: number; requestThreshold: number }

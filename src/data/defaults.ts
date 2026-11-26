@@ -9,10 +9,14 @@ export const PAGINATION_FIELDS = [
   { key: 'statistics', label: '账号统计', max: 4 },
 ] as const
 
+export const DEFAULT_FINGERPRINT_THRESHOLD_PERCENT = 90
+
 export const DEFAULT_SETTINGS: Settings = {
   prefixes: { normal: '', downshift: 'downshift' },
   routing: DEFAULT_ROUTING,
   inspectionMethod: 'candy',
+  inspectFreeAccounts: false,
+  fingerprintThresholdPercent: DEFAULT_FINGERPRINT_THRESHOLD_PERCENT,
   retry: { maxRetries: 2, baseDelayMs: 5000, backoffFactor: 2 },
   failureRule: { windowRounds: 2, requestThreshold: 3 },
   quota: { minRemainingPercent: 15, unknownPolicy: 'check' },

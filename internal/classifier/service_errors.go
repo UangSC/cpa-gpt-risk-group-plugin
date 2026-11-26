@@ -1,11 +1,86 @@
 package classifier
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 const maxRetryWaitMs = 120000
 
 func isTransientHTTPStatus(status int) bool {
 	return status == 502 || status == 503 || status == 429
+}
+
+func attemptHTTPStatus(status any) (int, bool) {
+	switch code := status.(type) {
+	case int:
+		return code, true
+	case float64:
+		if code == float64(int(code)) {
+			return int(code), true
+		}
+	}
+	return 0, false
+}
+
+func formatHTTPStatusSequence(codes []int) string {
+	if len(codes) == 0 {
+		return ""
+	}
+	if len(codes) == 1 {
+		return fmt.Sprintf("HTTP %d", codes[0])
+	}
+	allSame := true
+	for _, code := range codes[1:] {
+		if code != codes[0] {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		return fmt.Sprintf("HTTP %d ×%d", codes[0], len(codes))
+	}
+	parts := make([]string, len(codes))
+	for i, code := range codes {
+		parts[i] = strconv.Itoa(code)
+	}
+	return "HTTP " + strings.Join(parts, "/")
+}
+
+type attemptErrorSummary struct {
+	httpCodes     []int
+	networkErrors int
+	has200Invalid bool
+}
+
+func summarizeAttemptErrors(attempts []Attempt) attemptErrorSummary {
+	var summary attemptErrorSummary
+	var targets []Attempt
+	for _, attempt := range attempts {
+		if !attempt.LocalState {
+			targets = append(targets, attempt)
+		}
+	}
+	if len(targets) == 0 {
+		targets = attempts
+	}
+	for _, attempt := range targets {
+		if code, ok := attemptHTTPStatus(attempt.Status); ok {
+			if code >= 200 && code < 300 {
+				if !attempt.ValidResponse {
+					summary.has200Invalid = true
+				}
+			} else if code > 0 {
+				summary.httpCodes = append(summary.httpCodes, code)
+			}
+			continue
+		}
+		if attempt.Status == "network-error" {
+			summary.networkErrors++
+		}
+	}
+	return summary
 }
 
 func newServiceErrorEvidence(codes []int, settings Settings) *ServiceErrors {
@@ -18,7 +93,7 @@ func markFrequentServiceErrors(round *Round, codes []int, settings Settings) {
 	round.Evidence.ServiceError.ErrorRoundsInWindow = 1
 	round.Evidence.ServiceError.Trigger = "attempts"
 	round.Outcome, round.ReasonCode = "downshift", "repeated-service-errors"
-	round.Reason = fmt.Sprintf("本轮累计 %d 次 502/503/429，达到 %d 次频繁异常门槛", len(codes), settings.FailureRule.RequestThreshold)
+	round.Reason = fmt.Sprintf("本轮累计 %d 次服务异常（%s），达到 %d 次频繁异常门槛", len(codes), formatHTTPStatusSequence(codes), settings.FailureRule.RequestThreshold)
 }
 
 func applyServiceErrorRule(round *Round, codes []int, previous []Round, settings Settings) {
@@ -45,12 +120,17 @@ func applyServiceErrorRule(round *Round, codes []int, previous []Round, settings
 		}
 	}
 	round.Evidence.ServiceError.ErrorRoundsInWindow = count
+	summary := summarizeAttemptErrors(round.Evidence.Attempts)
+	reasonCodes := formatHTTPStatusSequence(codes)
+	if len(summary.httpCodes) > len(codes) {
+		reasonCodes = formatHTTPStatusSequence(summary.httpCodes)
+	}
 	round.ReasonCode = "single-service-error"
-	round.Reason = fmt.Sprintf("本轮出现 %d 次 502/503/429，未达到单轮或连续失败轮次门槛，保持当前分组", len(codes))
+	round.Reason = fmt.Sprintf("本轮出现 %d 次服务异常（%s），未达到单轮或连续失败轮次门槛，保持当前分组", len(codes), reasonCodes)
 	if count >= settings.FailureRule.WindowRounds {
 		round.Evidence.ServiceError.Trigger = "rounds"
 		round.Outcome, round.ReasonCode = "downshift", "repeated-service-errors"
-		round.Reason = fmt.Sprintf("连续 %d 轮未完成检测并出现 502/503/429，达到重复失败门槛", count)
+		round.Reason = fmt.Sprintf("连续 %d 轮未完成检测并出现服务异常（%s），达到重复失败门槛", count, reasonCodes)
 	}
 }
 
@@ -65,15 +145,8 @@ func failedServiceErrorRound(round Round) bool {
 		if attempt.LocalState {
 			continue
 		}
-		switch status := attempt.Status.(type) {
-		case int:
-			if isTransientHTTPStatus(status) {
-				return true
-			}
-		case float64:
-			if status == float64(int(status)) && isTransientHTTPStatus(int(status)) {
-				return true
-			}
+		if code, ok := attemptHTTPStatus(attempt.Status); ok && isTransientHTTPStatus(code) {
+			return true
 		}
 	}
 	return false

@@ -1,6 +1,6 @@
 // 通用组件稳定入口；具体实现按图标、控件、浮层和选择状态分开维护。
 export { Icon } from './ui/icons'
-export { Dot, Chip, Switch, Segmented, QuotaMeter, useNow } from './ui/primitives'
+export { Dot, Chip, Switch, Segmented, QuotaMeter, useNow, useSlidingIndicator } from './ui/primitives'
 export type { ChipTone, SegmentedOption } from './ui/primitives'
 export { NameMaskToggle, SecretName } from './ui/identity'
 export { HoverCard } from './ui/HoverCard'

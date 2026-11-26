@@ -54,18 +54,19 @@ func New(host HostCall, opts Options) (*Client, error) {
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 
 // RememberManagementKey is used only after CPA has authenticated a management request.
-func (c *Client) RememberManagementKey(header string) {
-	if !strings.HasPrefix(header, "Bearer ") {
-		return
+func (c *Client) RememberManagementKey(headers http.Header) {
+	key := headers.Get("Authorization")
+	if scheme, value, ok := strings.Cut(key, " "); ok && strings.EqualFold(scheme, "Bearer") {
+		key = value
 	}
-	key := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	if key == "" || len(key) > 8192 || strings.ContainsAny(key, "\r\n") {
+	if key == "" {
+		key = headers.Get("X-Management-Key")
+	}
+	if strings.TrimSpace(key) == "" || len(key) > 8192 || strings.ContainsAny(key, "\r\n") {
 		return
 	}
 	c.mu.Lock()
-	if c.managementKey == "" {
-		c.managementKey = key
-	}
+	c.managementKey = key
 	c.mu.Unlock()
 }
 
@@ -99,6 +100,14 @@ func (c *Client) request(ctx context.Context, method, endpoint string, body any,
 		return errors.New("无法连接 CPA 官方管理接口")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		// A stale key can cause CPA to temporarily block further loopback requests.
+		c.mu.Lock()
+		if c.managementKey == key {
+			c.managementKey = ""
+		}
+		c.mu.Unlock()
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil || len(data) > maxResponseBytes {
 		return errors.New("CPA 管理响应读取失败或超过限制")

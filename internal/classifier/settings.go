@@ -15,11 +15,16 @@ func validateSettings(v Settings) error {
 	if v.Routing.Mode != "none" && v.Routing.Mode != "prefix" && v.Routing.Mode != "priority" {
 		return bad("分组策略无效")
 	}
-	if v.InspectionMethod != "candy" && v.InspectionMethod != "fingerprint" {
-		return bad("检测方式仅支持糖果题或模型指纹")
+	if v.InspectionMethod != "candy" && v.InspectionMethod != "fingerprint" && v.InspectionMethod != "pelican" {
+		return bad("检测方式仅支持糖果题、模型指纹或画鹈鹕")
 	}
 	if v.InspectionMethod == "fingerprint" && !fingerprint.Available() {
 		return bad("模型指纹参考库暂不可用")
+	}
+	if percent := v.FingerprintThresholdPercent; percent != nil {
+		if *percent < 0 || *percent > 100 || *percent != math.Round(*percent*100)/100 {
+			return bad("模型指纹判定阈值应为 0～100，可保留两位小数")
+		}
 	}
 	if strings.TrimSpace(v.InspectionModel) == "" || len(v.InspectionModel) > 200 {
 		return bad("检测模型无效")
@@ -108,6 +113,12 @@ func weightsChanged(a, b RoutingSettings) bool {
 func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
+	if v.FingerprintThresholdPercent == nil {
+		// 旧客户端保存其它设置时继续使用已保存的指纹阈值。
+		s.mu.Lock()
+		v.FingerprintThresholdPercent = s.state.Settings.FingerprintThresholdPercent
+		s.mu.Unlock()
+	}
 	normalizeScheduleDefaults(&v.Schedule, v.Quota.MinRemainingPercent)
 	if err := validateSettings(v); err != nil {
 		return err
@@ -192,7 +203,7 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	for _, c := range live {
 		s.mu.Lock()
 		r := s.recordLocked(c.ID)
-		if excludedFromInspection(c, r) {
+		if excludedFromInspection(c, r, v) {
 			s.mu.Unlock()
 			continue
 		}

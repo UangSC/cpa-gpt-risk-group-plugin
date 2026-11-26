@@ -1,0 +1,1063 @@
+/* Pelican SVG Album Cards, 3-into-1 Layout Switch Morph, & Minimalist Quick-Look */
+
+/* ------------------------------------------- 3-into-1 Layout Switch Morphing */
+
+.layout-switch {
+  transition: gap 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.layout-switch button {
+  max-width: 86px;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  transition:
+    max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    padding-inline 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease,
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.16s ease;
+}
+
+.layout-switch.is-pelican-locked {
+  gap: 0;
+}
+
+.layout-switch.is-pelican-locked > .sliding-pill {
+  display: none;
+}
+
+.layout-switch.is-pelican-locked button.is-collapsing {
+  max-width: 0 !important;
+  padding-inline: 0 !important;
+  margin: 0 !important;
+  border-width: 0 !important;
+  opacity: 0;
+  transform: translateX(12px) scale(0.84);
+  pointer-events: none;
+}
+
+.layout-switch.is-pelican-locked button.is-locked-card {
+  cursor: default;
+  color: var(--text);
+  font-weight: 600;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-1) !important;
+}
+
+/* --------------------------------------------------- Pelican SVG Album Grid */
+
+.pelican-album-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--pelican-cols, 3), minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .pelican-album-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .pelican-album-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pelican-album-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.16s ease,
+    box-shadow 0.2s ease;
+}
+
+.view-enter .pelican-album-card {
+  animation: card-spring-in 0.28s cubic-bezier(0.22, 1.12, 0.36, 1) backwards;
+}
+
+.view-enter .pelican-album-card:nth-child(2) { animation-delay: 28ms; }
+.view-enter .pelican-album-card:nth-child(3) { animation-delay: 56ms; }
+.view-enter .pelican-album-card:nth-child(4) { animation-delay: 84ms; }
+.view-enter .pelican-album-card:nth-child(5) { animation-delay: 112ms; }
+.view-enter .pelican-album-card:nth-child(6) { animation-delay: 140ms; }
+
+.pelican-album-card:hover:not(.is-disabled-cred) {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-hover);
+}
+
+.pelican-album-card.tone-normal {
+  border-color: color-mix(in srgb, var(--normal-border) 62%, var(--border));
+}
+
+.pelican-album-card.tone-downshift {
+  border-color: color-mix(in srgb, var(--danger-border) 70%, var(--border));
+}
+
+.pelican-album-card.tone-awaiting {
+  border-color: color-mix(in srgb, var(--warn-border) 68%, var(--border));
+}
+
+.pelican-album-card.is-selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-1);
+}
+
+.pelican-album-card.is-disabled-cred {
+  opacity: 0.66;
+}
+
+/* ------------------------------------------------ Artwork Stage (16:10 Hero) */
+
+.pelican-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 212px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  background:
+    radial-gradient(circle, rgba(15, 23, 42, 0.045) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(180deg, #f8fafd 0%, #eef3fa 100%);
+}
+
+[data-plugin-theme='dark'] .pelican-stage {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(180deg, #161e2c 0%, #0f1520 100%);
+}
+
+.pelican-stage-top {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.pelican-select-pill,
+.pelican-stage-badges {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pelican-select-pill {
+  height: 26px;
+  padding: 0 7px 0 6px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.pelican-select-pill:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.pelican-stage-badges .verdict,
+.pelican-stage-badges .chip {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.pelican-stage-icon-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    opacity 0.16s ease,
+    background-color 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.12s ease;
+}
+
+.pelican-stage-icon-btn.is-hover-only {
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+.pelican-album-card:hover .pelican-stage-icon-btn.is-hover-only,
+.pelican-album-card:focus-within .pelican-stage-icon-btn.is-hover-only {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (hover: none) {
+  .pelican-stage-icon-btn.is-hover-only {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pelican-stage-icon-btn > svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pelican-stage-icon-btn:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pelican-stage-icon-btn:active {
+  transform: scale(0.93) !important;
+}
+
+.pelican-stage-hit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  display: block;
+}
+
+.pelican-stage-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pelican-artwork-mat {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: hidden;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pelican-stage-hit:hover .pelican-artwork-mat {
+  transform: scale(1.018);
+}
+
+.pelican-svg-frame-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pelican-svg-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: transparent;
+  pointer-events: none;
+}
+
+.pelican-svg-iframe.is-interactive {
+  pointer-events: auto;
+}
+
+.pelican-svg-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.pelican-zoom-cue {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-1);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 540;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.pelican-zoom-cue > svg {
+  width: 11px;
+  height: 11px;
+}
+
+.pelican-stage-hit:hover .pelican-zoom-cue,
+.pelican-stage-hit:focus-visible .pelican-zoom-cue {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pelican-stage-redraw-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-focus);
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 560;
+  box-shadow: var(--shadow-1);
+  pointer-events: none;
+}
+
+/* ------------------------------------------- Empty / Drawing / Error Canvas */
+
+.pelican-stage-empty {
+  width: 100%;
+  height: 100%;
+  padding: 32px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+}
+
+button.pelican-stage-empty.is-clickable-easel {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+button.pelican-stage-empty.is-clickable-easel:hover {
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+
+button.pelican-stage-empty.is-clickable-easel:hover .pelican-empty-emblem {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent);
+  background: var(--surface);
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: var(--shadow-1);
+}
+
+button.pelican-stage-empty.is-clickable-easel:hover strong {
+  color: var(--accent-text);
+}
+
+.pelican-empty-emblem {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-3);
+  margin-bottom: 2px;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.pelican-empty-emblem.is-danger {
+  border-style: solid;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pelican-easel-pulse {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-focus);
+  color: var(--accent);
+  animation: pelican-float 1.6s ease-in-out infinite;
+}
+
+@keyframes pelican-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.pelican-stage-empty strong {
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--text);
+  transition: color 0.14s ease;
+}
+
+.pelican-stage-empty > span:not(.pelican-empty-emblem) {
+  max-width: 280px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.pelican-stage-empty .pelican-error-title,
+.pelican-stage-empty .pelican-error-detail {
+  color: var(--danger);
+}
+
+.pelican-stage-empty .btn {
+  margin-top: 4px;
+}
+
+/* --------------------------------------------------- Caption & Action Strip */
+
+.pelican-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 13px 9px;
+  cursor: pointer;
+}
+
+.pelican-album-card.is-disabled-cred .pelican-caption {
+  cursor: default;
+}
+
+.pelican-caption-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pelican-ident {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pelican-cred-name {
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pelican-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pelican-time-btn {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 1px 5px;
+  margin-right: -5px;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 0.14s ease, background-color 0.14s ease;
+}
+
+.pelican-time-btn:hover {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.pelican-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.pelican-routing-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pelican-quota-pills {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pelican-quota-tag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.pelican-quota-tag em {
+  font-style: normal;
+  color: var(--text-3);
+}
+
+.pelican-quota-tag b {
+  font-weight: 620;
+  color: var(--text-2);
+}
+
+.pelican-quota-tag.is-low {
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+
+.pelican-quota-tag.is-low b {
+  color: var(--warn);
+}
+
+.pelican-quota-tag.is-zero {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+}
+
+.pelican-quota-tag.is-zero b {
+  color: var(--danger);
+}
+
+.pelican-quota-skip {
+  font-size: 10.5px;
+  color: var(--warn);
+  font-weight: 560;
+}
+
+.pelican-quota-muted {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.pelican-quota-refresh-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+
+.pelican-quota-refresh-inline:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pelican-quota-refresh-inline > svg {
+  width: 11.5px;
+  height: 11.5px;
+}
+
+/* ------------------------------------------- State-Aware Minimalist Footer */
+
+.pelican-action-bar {
+  margin-top: auto;
+  padding: 7px 12px 9px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 43px;
+}
+
+.pelican-await-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* Compact unified 2-segment verdict pill on drawn cards */
+.pelican-verdict-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+}
+
+.pelican-verdict-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 560;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.16s ease,
+    color 0.14s ease,
+    box-shadow 0.16s ease,
+    transform 0.1s ease;
+}
+
+.pelican-verdict-opt > svg {
+  width: 12.5px;
+  height: 12.5px;
+}
+
+.pelican-verdict-opt:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.pelican-verdict-opt:disabled {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+
+.pelican-verdict-opt.is-normal:hover:not(:disabled) {
+  color: var(--normal);
+  background: color-mix(in srgb, var(--normal-soft) 65%, transparent);
+}
+
+.pelican-verdict-opt.is-normal.is-selected {
+  background: var(--normal-soft);
+  border-color: var(--normal-border);
+  color: var(--normal);
+  font-weight: 620;
+  box-shadow: var(--shadow-1);
+}
+
+.pelican-verdict-opt.is-downshift:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 65%, transparent);
+}
+
+.pelican-verdict-opt.is-downshift.is-selected {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+  font-weight: 620;
+  box-shadow: var(--shadow-1);
+}
+
+/* Prominent triage buttons used in Lightbox & EvidenceSheet */
+.pelican-judge-group,
+.pelican-lightbox-verdict-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pelican-judge-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 580;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.pelican-judge-btn > svg {
+  width: 13.5px;
+  height: 13.5px;
+}
+
+.pelican-judge-bang {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font: 700 10.5px/1 var(--mono);
+}
+
+.pelican-judge-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.pelican-judge-btn:disabled {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+
+.pelican-judge-btn.is-normal:hover:not(:disabled) {
+  border-color: var(--normal-dot);
+  background: var(--normal-soft);
+  color: var(--normal);
+}
+
+.pelican-judge-btn.is-normal.is-selected {
+  border-color: var(--normal-dot);
+  background: var(--normal-soft);
+  color: var(--normal);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--normal-dot) 32%, transparent);
+}
+
+.pelican-judge-btn.is-downshift:hover:not(:disabled) {
+  border-color: var(--danger-dot);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pelican-judge-btn.is-downshift.is-selected {
+  border-color: var(--danger-dot);
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger-dot) 32%, transparent);
+}
+
+.pelican-utility-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* ------------------------------------------- Minimalist Quick-Look Lightbox */
+
+.modal.pelican-lightbox-modal {
+  width: min(980px, 95vw);
+}
+
+.pelican-lightbox-modal .modal-body {
+  padding: 12px 16px;
+}
+
+.pelican-lightbox-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pelican-lightbox-sub {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pelican-sub-warn {
+  color: var(--warn);
+}
+
+.pelican-lightbox-counter {
+  font-size: 11.5px;
+  font-weight: 520;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.pelican-lightbox-viewport {
+  position: relative;
+  width: 100%;
+  height: min(64vh, 540px);
+  min-height: 300px;
+  padding: 18px 60px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background:
+    radial-gradient(circle, rgba(15, 23, 42, 0.05) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(180deg, #f8fafd 0%, #edf2fa 100%);
+  transition: background 0.2s ease;
+}
+
+@media (max-width: 640px) {
+  .pelican-lightbox-viewport {
+    padding: 12px 46px;
+  }
+}
+
+.pelican-lightbox-viewport.is-scheme-dark {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(180deg, #151d2b 0%, #0c111a 100%);
+}
+
+.pelican-lightbox-canvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pelican-canvas-fade 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes pelican-canvas-fade {
+  from {
+    opacity: 0.45;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pelican-lightbox-contrast-anchor {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  display: inline-flex;
+}
+
+.pelican-lightbox-contrast-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 75%, transparent);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.16s ease, background-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.pelican-lightbox-viewport:hover .pelican-lightbox-contrast-btn,
+.pelican-lightbox-contrast-btn:focus-visible,
+.pelican-lightbox-contrast-btn.is-toggled {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .pelican-lightbox-contrast-btn {
+    opacity: 0.9;
+  }
+}
+
+.pelican-lightbox-contrast-btn > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pelican-lightbox-contrast-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.pelican-lightbox-contrast-btn.is-toggled {
+  border-color: var(--border-focus);
+  color: var(--accent-text);
+}
+
+.pelican-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
+  transition:
+    opacity 0.16s ease,
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pelican-lightbox-nav.is-prev {
+  left: 12px;
+}
+
+.pelican-lightbox-nav.is-prev > svg {
+  transform: rotate(90deg) !important;
+}
+
+.pelican-lightbox-nav.is-next {
+  right: 12px;
+}
+
+.pelican-lightbox-nav:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.pelican-lightbox-nav:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.pelican-lightbox-nav:disabled {
+  opacity: 0.24;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* EvidenceSheet inline Pelican preview & collapsible source */
+.ev-pelican-preview {
+  position: relative;
+  height: 230px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin: 8px 0 10px;
+  cursor: zoom-in;
+  background:
+    radial-gradient(circle, rgba(15, 23, 42, 0.05) 1px, transparent 1px) 0 0 / 16px 16px,
+    var(--surface-2);
+  transition: border-color 0.16s ease;
+}
+
+.ev-pelican-preview:hover {
+  border-color: var(--border-focus);
+}
+
+.ev-pelican-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pelican-code-viewer {
+  width: 100%;
+  max-height: 260px;
+  margin: 0;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  overflow: auto;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-2);
+  font: 11.5px/1.55 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-switch,
+  .layout-switch button,
+  .pelican-album-card,
+  .pelican-artwork-mat,
+  .pelican-easel-pulse,
+  .pelican-zoom-cue,
+  .pelican-lightbox-canvas,
+  .pelican-lightbox-nav,
+  .sliding-pill,
+  .collapse-grid {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .pelican-album-card:hover:not(.is-disabled-cred) {
+    transform: none;
+  }
+}

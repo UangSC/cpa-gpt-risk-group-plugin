@@ -9,8 +9,14 @@ registerInspectionMethod({
 })
 registerInspectionMethod({
   id: 'fingerprint', label: '模型指纹',
-  description: '采集三份有效数字序列后合并归因；目标参考匹配且概率严格大于 90% 才算正常。未收录模型或证据不足保持不确定。',
+  description: '采集三份有效数字序列后合并归因。未收录模型或证据不足时保持不确定。',
   challengeCount: 3,
   validateReply: (reply) => !!reply.sample?.accepted &&
     reply.sample.numbers.length > 0 && reply.sample.numbers.every(Number.isFinite),
+})
+registerInspectionMethod({
+  id: 'pelican', label: '画鹈鹕',
+  description: '仅请求绘制「鹈鹕骑自行车」SVG 循环动画，输出后由人工肉眼判定风控分组。',
+  challengeCount: 1,
+  validateReply: (reply) => Boolean(reply.pelican?.svg?.trim()),
 })

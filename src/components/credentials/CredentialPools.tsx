@@ -5,8 +5,8 @@ import type { VerdictFilter } from '../../store/store'
 import { Chip, HoverCard, PlanBadge, SecretName, useSelection } from '../ui'
 import { CredentialRouting } from '../RoutingControls'
 import { StatusLights } from '../StatusLights'
-import { ActivityRail, type CredentialRuntime, StatusPill, GroupCell, QuotaCell, Actions, resolveCardActivity, stop } from './CredentialParts'
-import { CardNote, SelectableCard, cardNote } from './SelectableCard'
+import { ActivityRail, type CredentialRuntime, FreeSkipChip, StatusPill, GroupCell, QuotaCell, StateChips, Actions, resolveCardActivity, stop } from './CredentialParts'
+import { CardNote, CardNoteTooltip, SelectableCard, cardNoteTone } from './SelectableCard'
 import { CredentialPager, credentialPage } from './CredentialPager'
 
 type PoolKey = 'normal' | 'attention'
@@ -36,23 +36,15 @@ const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialVie
           ? '低于门槛'
           : null
       : null
-  const hasSync = view.attention.some((a) => a.kind === 'sync')
-  const summaryClass = isDisabled
-    ? ''
-    : view.verdict === 'downshift'
-      ? 'is-downshift'
-      : hasSync || view.attention.some((a) => a.kind === 'auth')
-        ? 'is-attention'
-        : view.verdict === 'normal'
-          ? 'is-calm'
-          : ''
+  const noteTone = cardNoteTone(view, isDisabled)
+  const summaryClass = noteTone === 'error' ? 'is-error' : noteTone === 'calm' ? 'is-calm' : ''
 
   return (
     <SelectableCard
       credentialId={view.credential.id}
       selected={selected}
       disabled={isDisabled}
-      onToggle={() => selection.toggle(view.credential.id)}
+      onToggle={(shiftKey) => selection.toggle(view.credential.id, shiftKey)}
       className={`lane-card tone-${view.verdict}${activity ? ` is-active is-${activity.kind}` : ''}`}
       testId={`cred-${view.credential.id}`}
     >
@@ -63,15 +55,17 @@ const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialVie
           className="checkbox"
           checked={selected}
           disabled={isDisabled}
-          onChange={() => {
-            if (!isDisabled) selection.toggle(view.credential.id)
+          onChange={() => {}}
+          onClick={(event) => {
+            stop(event)
+            if (!isDisabled) selection.toggle(view.credential.id, event.shiftKey)
           }}
-          onClick={stop}
           aria-label={isDisabled ? '已关闭的凭证无法勾选' : '选择凭证'}
         />
         <PlanBadge plan={view.credential.plan} size="sm" />
         <SecretName name={view.credential.name} className="lane-card-name" />
         {isDisabled && <Chip tone="plain">已关闭</Chip>}
+        <FreeSkipChip view={view} settings={runtime.settings} />
         {activity && (
           <Chip tone={activity.chipTone} dot>
             {activity.label}
@@ -84,7 +78,7 @@ const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialVie
             </Chip>
           </HoverCard>
         )}
-        {!isDisabled && view.credential.auth === 'expired' && <Chip tone="downshift">认证失效</Chip>}
+        {!isDisabled && <StateChips view={view} />}
         <StatusPill view={view} size="sm" />
       </div>
 
@@ -101,9 +95,13 @@ const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialVie
             </span>
             {quotaInlineWarn && <span className="quota-warn-inline">· {quotaInlineWarn}</span>}
           </div>
-          <HoverCard compact wrapperClassName="summary-tip-wrap" content={cardNote(view)}>
+          <HoverCard
+            compact
+            wrapperClassName="summary-tip-wrap"
+            content={<CardNoteTooltip view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />}
+          >
             <div className={`lane-card-summary ${summaryClass}`}>
-              <CardNote view={view} />
+              <CardNote view={view} inspectFreeAccounts={runtime.settings.inspectFreeAccounts} />
             </div>
           </HoverCard>
         </div>
@@ -117,7 +115,7 @@ const PoolCard = memo(function PoolCard({ view, runtime }: { view: CredentialVie
           <GroupCell view={view} settings={runtime.settings} />
           <CredentialRouting credential={view.credential} />
         </div>
-        <Actions view={view} runtime={runtime} mode="pool" />
+        <Actions view={view} runtime={runtime} mode="pool" showQuickRun />
       </div>
     </SelectableCard>
   )

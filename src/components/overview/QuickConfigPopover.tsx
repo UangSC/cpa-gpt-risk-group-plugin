@@ -1,12 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { GroupingMode, ReasoningEffort } from '../types'
-import { useStore } from '../store/store'
-import { saveInspectionOptions } from '../store/actions'
-import { analyzePrefixes, DEFAULT_PREFIXES, stripGroupPrefix } from '../lib/prefix'
-import { isManuallyExcluded } from '../lib/derive'
-import { isCompositionEvent, isPlainShortcut } from '../lib/keyboard'
-import { HoverCard, Icon, Segmented } from './ui'
+import type { GroupingMode, ReasoningEffort } from '../../types'
+import { useStore } from '../../store/store'
+import { saveInspectionOptions } from '../../store/actions'
+import { analyzePrefixes, DEFAULT_PREFIXES } from '../../lib/prefix'
+import { collectQuickModelChoices } from '../../lib/models'
+import { isCompositionEvent, isPlainShortcut, isPrimaryShortcut } from '../../lib/keyboard'
+import { HoverCard, Icon, Segmented } from '../ui'
 
 const EFFORTS: { value: ReasoningEffort; label: string }[] = [
   { value: 'low', label: '低' },
@@ -58,21 +58,10 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null)
   const popoverId = useId()
 
-  const modelChoices = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const credential of credentials) {
-      if (credential.disabled || isManuallyExcluded(credential)) continue
-      const unique = new Set(credential.models.map((m) => stripGroupPrefix(m, settings.prefixes)))
-      for (const name of unique) {
-        counts.set(name, (counts.get(name) ?? 0) + 1)
-      }
-    }
-    const names = new Set<string>([settings.inspectionModel, ...counts.keys()])
-    return [...names]
-      .filter(Boolean)
-      .sort((a, b) => (a === settings.inspectionModel ? -1 : b === settings.inspectionModel ? 1 : a.localeCompare(b)))
-      .map((name) => ({ name, count: counts.get(name) ?? 0 }))
-  }, [credentials, settings.inspectionModel, settings.prefixes])
+  const modelChoices = useMemo(
+    () => collectQuickModelChoices(credentials, settings.inspectionModel, settings.prefixes),
+    [credentials, settings.inspectionModel, settings.prefixes],
+  )
 
   const openPopover = () => {
     if (disabled) return
@@ -114,6 +103,9 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
       : Math.min(rect.bottom + gap, Math.max(pad, window.innerHeight - popRect.height - pad))
     const left = Math.max(pad, Math.min(rect.left, Math.max(pad, window.innerWidth - popRect.width - pad)))
     setCoords({ top, left, placement: placeTop ? 'top' : 'bottom' })
+    popoverRef.current.querySelector<HTMLElement>('.quick-model-card[aria-pressed="true"]')?.scrollIntoView({
+      block: 'nearest',
+    })
   }, [open, mode, normalPrefix, downshiftPrefix, modelChoices.length])
 
   useEffect(() => {
@@ -180,8 +172,19 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
       : priorityError
   const canSave = !disabled && !saving && dirty && !invalidReason
 
-  const handleSave = async () => {
-    if (!canSave) return
+  const handleSave = async (modelOverride?: string) => {
+    const targetModel = (modelOverride ?? model).trim()
+    const isDirty =
+      targetModel !== settings.inspectionModel ||
+      effort !== settings.reasoningEffort ||
+      routingChanged ||
+      prefixChanged
+    const hasError = !targetModel
+      ? '检测模型不能为空'
+      : mode === 'prefix'
+        ? (analysis.errors[0] ?? null)
+        : priorityError
+    if (disabled || saving || !isDirty || hasError) return
     const nextRouting = {
       ...settings.routing,
       mode,
@@ -198,7 +201,7 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
           : settings.routing.groups,
     }
     const saved = await saveInspectionOptions({
-      inspectionModel: cleanModel,
+      inspectionModel: targetModel,
       reasoningEffort: effort,
       ...(routingChanged ? { routing: nextRouting } : {}),
       ...(prefixChanged ? { prefixes: nextPrefixes } : {}),
@@ -208,7 +211,7 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
       useStore.getState().notify({
         tone: 'success',
         title: '巡检配置已更新',
-        detail: `${cleanModel} · 思考${EFFORT_SHORT[effort]} · ${MODE_LABEL[mode]}`,
+        detail: `${targetModel} · 思考${EFFORT_SHORT[effort]} · ${MODE_LABEL[mode]}`,
       })
     } else if (useStore.getState().pendingSettingsConfirmation) {
       setOpen(false)
@@ -249,6 +252,12 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
             aria-label="巡检快捷配置"
             className={`quick-config-popover is-${coords.placement}`}
             style={{ top: coords.top, left: coords.left }}
+            onKeyDown={(event) => {
+              if (isPrimaryShortcut(event.nativeEvent, 'Enter')) {
+                event.preventDefault()
+                void handleSave()
+              }
+            }}
           >
             <div className="quick-config-head">
               <strong>巡检快捷配置</strong>
@@ -276,24 +285,37 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
             <div className="quick-config-section">
               <div className="quick-section-head">
                 <span>检测模型</span>
-                <small>{modelChoices.length} 个可用</small>
+                <small>{modelChoices.length} 个聊天模型 · 双击直存</small>
               </div>
-              <div className="quick-model-grid" role="group" aria-label="选择检测模型">
-                {modelChoices.map((item) => (
-                  <button
-                    key={item.name}
-                    type="button"
-                    className="quick-model-card"
-                    aria-pressed={cleanModel === item.name}
-                    onClick={() => setModel(item.name)}
-                  >
-                    <span className="quick-model-name mono">{item.name}</span>
-                    <span className="quick-model-meta">
-                      {item.count > 0 ? `${item.count} 凭证` : '自定义'}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              {modelChoices.length > 0 ? (
+                <div className="quick-model-grid" role="group" aria-label="选择检测模型">
+                  {modelChoices.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className="quick-model-card"
+                      title={`${item.name}（双击直接保存）`}
+                      aria-pressed={cleanModel === item.name}
+                      onClick={() => setModel(item.name)}
+                      onDoubleClick={() => {
+                        setModel(item.name)
+                        if (item.name === settings.inspectionModel && !dirty) {
+                          setOpen(false)
+                        } else {
+                          void handleSave(item.name)
+                        }
+                      }}
+                    >
+                      <span className="quick-model-name mono">{item.name}</span>
+                      <span className="quick-model-meta">
+                        {item.count > 0 ? `${item.count} 凭证` : '自定义'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="quick-mode-note">当前凭证暂无可选聊天模型，请在下方直接输入模型名。</p>
+              )}
               <input
                 type="text"
                 className="input mono quick-model-input"
@@ -314,18 +336,13 @@ export function QuickConfigPopover({ disabled }: { disabled: boolean }) {
 
             <div className="quick-effort-row">
               <span className="quick-section-label">思考等级</span>
-              <div className="segmented quick-effort-group" role="group" aria-label="思考等级">
-                {EFFORTS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={effort === item.value}
-                    onClick={() => setEffort(item.value)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                ariaLabel="思考等级"
+                className="quick-effort-group"
+                value={effort}
+                onChange={setEffort}
+                options={EFFORTS}
+              />
             </div>
 
             <div className="quick-config-section">

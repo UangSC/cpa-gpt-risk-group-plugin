@@ -153,6 +153,7 @@ export function HoverCard({
     }
     clearTimers()
     const wait = pinnedRef.current ? Math.max(PIN_LINGER_MS, hideDelay) : hideDelay
+    const fadeDuration = compact && !pinnedRef.current ? 150 : FADE_MS
     hideTimer.current = window.setTimeout(() => {
       hideTimer.current = null
       setFading(true)
@@ -162,9 +163,9 @@ export function HoverCard({
         setFading(false)
         pinnedRef.current = false
         setPinned(false)
-      }, FADE_MS)
+      }, fadeDuration)
     }, wait)
-  }, [clearTimers, fadeOnHide, hideDelay, hideNow, hasSelectedText])
+  }, [clearTimers, compact, fadeOnHide, hideDelay, hideNow, hasSelectedText])
 
   useEffect(
     () => () => {

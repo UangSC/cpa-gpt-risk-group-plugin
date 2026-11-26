@@ -1,8 +1,8 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 
-interface SelectionApi {
+export interface SelectionApi {
   selected: string[]
-  toggle: (id: string) => void
+  toggle: (id: string, shiftKey?: boolean) => void
   set: (ids: string[]) => void
   clear: () => void
   has: (id: string) => boolean

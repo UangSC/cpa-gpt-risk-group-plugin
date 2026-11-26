@@ -5,7 +5,10 @@ import { scheduleErrors } from './schedule'
 import { listInspectionMethods } from '../inspection'
 import { PAGINATION_FIELDS } from '../data/defaults'
 
-const GROUPS = ['prefixes', 'routing', 'inspectionMethod', 'retry', 'failureRule', 'quota', 'concurrency', 'inspectionModel', 'reasoningEffort', 'headerOverrides', 'schedule', 'pagination'] as const
+const GROUPS = [
+  'prefixes', 'routing', 'inspectionMethod', 'inspectFreeAccounts', 'fingerprintThresholdPercent', 'retry', 'failureRule',
+  'quota', 'concurrency', 'inspectionModel', 'reasoningEffort', 'headerOverrides', 'schedule', 'pagination',
+] as const
 const compareValue = (settings: Settings, group: typeof GROUPS[number]) => group === 'schedule'
   ? { ...settings.schedule, nextRunAt: null } : settings[group]
 
@@ -82,6 +85,8 @@ export function settingsErrors(settings: Settings, managedHeaders: string[] = []
   if (!settings.inspectionModel.trim()) errors.push('检测模型不能为空')
   if (!['low', 'medium', 'high'].includes(settings.reasoningEffort)) errors.push('思考程度只能选择低、中或高')
   if (!listInspectionMethods().some((method) => method.id === settings.inspectionMethod)) errors.push('检测方式不可用')
+  const threshold = settings.fingerprintThresholdPercent
+  if (threshold < 0 || threshold > 100 || threshold !== Math.round(threshold * 100) / 100) errors.push('模型指纹判定阈值应为 0～100，可保留两位小数')
   if (!Number.isInteger(settings.concurrency.maxObjects) || settings.concurrency.maxObjects < 1 || settings.concurrency.maxObjects > 9) errors.push('巡检并发数应为 1～9 的整数')
   if (!Number.isInteger(settings.failureRule.requestThreshold) || settings.failureRule.requestThreshold < 2 || settings.failureRule.requestThreshold > 5) errors.push('单轮错误请求阈值应为 2～5 的整数')
   for (const { key, label, max } of PAGINATION_FIELDS) {

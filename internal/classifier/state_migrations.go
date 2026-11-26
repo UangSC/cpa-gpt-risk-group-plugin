@@ -9,6 +9,8 @@ import (
 	"github.com/UangSC/cpa-gpt-risk-group-plugin/internal/cpa"
 )
 
+const stateVersion = 9
+
 // loadState 在调度器启动前读取历史状态，迁移失败时保留磁盘上的原文件。
 func (s *Service) loadState() error {
 	raw, err := os.ReadFile(s.path)
@@ -23,7 +25,7 @@ func (s *Service) loadState() error {
 	if err := json.Unmarshal(raw, &persisted); err != nil {
 		return fmt.Errorf("状态文件无法解析，已保留原文件：%w", err)
 	}
-	if (persisted.Version < 1 || persisted.Version > 8) || persisted.Records == nil {
+	if (persisted.Version < 1 || persisted.Version > stateVersion) || persisted.Records == nil {
 		return errors.New("状态文件版本或记录结构不受支持")
 	}
 	upgradingHeaderProfile := persisted.Version < 6
@@ -59,6 +61,10 @@ func (s *Service) loadState() error {
 	}
 	if persisted.Settings.Routing.Mode == "" {
 		persisted.Settings.Routing.Mode = "none"
+	}
+	if persisted.Settings.FingerprintThresholdPercent == nil {
+		percent := defaultFingerprintThresholdPercent
+		persisted.Settings.FingerprintThresholdPercent = &percent
 	}
 	normalizeScheduleDefaults(&persisted.Settings.Schedule, persisted.Settings.Quota.MinRemainingPercent)
 	if err := validateSettings(persisted.Settings); err != nil {
@@ -125,9 +131,29 @@ func (s *Service) loadState() error {
 		persisted.ScheduledConfigurationFingerprint = ""
 		persisted.Version = 8
 	}
+	if persisted.Version < 9 {
+		restoreLegacyFingerprintThresholds(persisted.Records)
+		persisted.Version = 9
+	}
 	persisted.Settings.AcknowledgeScheduledConfigChanges = false
 	s.state = persisted
 	return nil
+}
+
+// 旧版指纹巡检使用固定阈值。只为缺少阈值的轮次补全旧规则。
+func restoreLegacyFingerprintThresholds(records map[string]*Record) {
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		for _, target := range record.Targets {
+			for _, round := range target.Rounds {
+				if evidence := round.Evidence.Fingerprint; evidence != nil && evidence.Threshold == 0 {
+					evidence.Threshold = defaultFingerprintThresholdPercent / 100
+				}
+			}
+		}
+	}
 }
 
 func legacyDefaultPriorities(routing RoutingSettings) bool {
