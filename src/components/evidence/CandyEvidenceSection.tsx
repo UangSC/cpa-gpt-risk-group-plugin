@@ -8,7 +8,7 @@ export function CandyEvidenceSection({ candy }: { candy: CandyEvidence }) {
       <dl className="kv">
         <dt>期望答案</dt>
         <dd>
-          含独立的 <b className="mono">{candy.expected}</b>（允许其它文字表述）
+          含独立的 <b className="mono">21</b>（允许其它文字表述）
         </dd>
         <dt>实际回答</dt>
         <dd>{candy.matched ? '通过' : '不符'}</dd>

@@ -40,10 +40,6 @@ func fingerprintWithReasoning(settings Settings, includeSchedule, includeReasoni
 	if settings.InspectionMethod == "pelican" {
 		data["pelicanPolicy"] = pelicanPolicyID
 	}
-	if settings.InspectionMethod == "candy" {
-		data["candyQuestion"] = CandyQuestion
-		data["candyExpectedAnswer"] = candyExpectedAnswer
-	}
 	if includeReasoning {
 		data["reasoningEffort"] = settings.ReasoningEffort
 	}

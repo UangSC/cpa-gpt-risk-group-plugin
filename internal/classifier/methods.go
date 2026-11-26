@@ -31,7 +31,7 @@ var methodSpecs = map[string]inspectionMethodSpec{
 		missingReason:               defaultCandyMissingReason,
 		countsTransientServiceError: true,
 		challenges: func() ([]fingerprint.Challenge, string) {
-			return []fingerprint.Challenge{{ID: candyPromptID, Question: CandyQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
+			return []fingerprint.Challenge{{ID: "candy-bag-21", Question: CandyQuestion, Instructions: cpa.DefaultProbeInstructions}}, ""
 		},
 		runningNote: func(int) *string { return nil },
 		formatHTTPReason: func(codeText string, _ int, pureHTTP bool) string {

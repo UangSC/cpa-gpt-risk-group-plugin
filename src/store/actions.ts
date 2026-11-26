@@ -6,6 +6,7 @@ import { useStore } from './store'
 import { refreshSnapshot } from './live'
 import { activeInspectionCredentialIds } from './exclusions'
 import { currentManagementKey } from '../api/auth'
+import { latestPelicanArtworkRound } from '../lib/pelican'
 import { canSkipManualReminder, manualWritePolicy, rememberManualReminder, restoreManualReminder } from '../lib/manualInspectionConsent'
 
 let preparingInspection = false
@@ -220,7 +221,7 @@ export async function judgePelicanVerdict(
     targets: current.targets.map((target) => {
       if (target.credentialId !== credentialId || target.model !== model) return target
       const targetRoundId =
-        roundId ?? target.rounds.find((r) => Boolean(r.evidence.pelican?.html || r.evidence.pelican?.svg))?.id
+        roundId ?? latestPelicanArtworkRound(target)?.id
       if (!targetRoundId) return target
       return {
         ...target,

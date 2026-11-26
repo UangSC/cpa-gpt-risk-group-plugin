@@ -177,13 +177,15 @@ type Candy struct {
 }
 
 type Pelican struct {
-	PromptID      string `json:"promptId"`
-	Question      string `json:"question"`
-	HTML          string `json:"html,omitempty"`
-	HTMLBytes     int    `json:"htmlBytes,omitempty"`
-	SVG           string `json:"svg,omitempty"`
-	SVGBytes      int    `json:"svgBytes"`
-	SVGPruned     bool   `json:"svgPruned,omitempty"`
+	PromptID string `json:"promptId"`
+	Question string `json:"question"`
+	// HTML 保存用于隔离渲染的完整动画，旧记录仍可仅包含 SVG。
+	HTML      string `json:"html,omitempty"`
+	HTMLBytes int    `json:"htmlBytes,omitempty"`
+	SVG       string `json:"svg,omitempty"`
+	SVGBytes  int    `json:"svgBytes"`
+	SVGPruned bool   `json:"svgPruned,omitempty"`
+	// RawSnippet 沿用既有 JSON 字段名，内容为无效绘制回复全文。
 	RawSnippet    string `json:"rawSnippet,omitempty"`
 	StrictFormat  bool   `json:"strictFormat"`
 	FormatNote    string `json:"formatNote"`

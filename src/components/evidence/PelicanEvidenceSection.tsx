@@ -6,12 +6,12 @@ import { activeInspectionCredentialIds } from '../../store/exclusions'
 import { isManuallyExcluded } from '../../lib/derive'
 import { Chip, Collapse, Icon } from '../ui'
 import {
-  PelicanSvgFrame,
   downloadPelicanHtml,
-  formatSvgBytes,
+  formatPelicanBytes,
   hasPelicanArtwork,
   pelicanByteCount,
-} from '../pelican/PelicanSvgStage'
+} from '../../lib/pelican'
+import { PelicanSvgFrame } from '../pelican/PelicanSvgStage'
 
 export function PelicanEvidenceSection({
   pelican,
@@ -97,7 +97,7 @@ export function PelicanEvidenceSection({
         {totalBytes > 0 && (
           <>
             <dt>文件体积</dt>
-            <dd className="mono">{formatSvgBytes(totalBytes)}</dd>
+            <dd className="mono">{formatPelicanBytes(totalBytes)}</dd>
           </>
         )}
       </dl>
@@ -157,7 +157,7 @@ export function PelicanEvidenceSection({
           </div>
           <Collapse
             title={sourceLabel}
-            hint={formatSvgBytes(totalBytes)}
+            hint={formatPelicanBytes(totalBytes)}
             action={
               <span className="inline" style={{ gap: 4 }}>
                 <button

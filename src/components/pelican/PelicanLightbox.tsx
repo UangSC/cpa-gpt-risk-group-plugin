@@ -7,13 +7,13 @@ import { formatDateTime, formatDuration } from '../../lib/format'
 import { isCompositionEvent, isEditingTarget, isPlainShortcut } from '../../lib/keyboard'
 import { Chip, HoverCard, Icon, Modal, PlanMark, SecretName } from '../ui'
 import {
-  PelicanSvgFrame,
   downloadPelicanHtml,
-  formatSvgBytes,
+  formatPelicanBytes,
   hasPelicanArtwork,
-  latestPelicanSvgRound,
+  latestPelicanArtworkRound,
   pelicanByteCount,
-} from './PelicanSvgStage'
+} from '../../lib/pelican'
+import { PelicanSvgFrame } from './PelicanSvgStage'
 
 export function PelicanLightbox() {
   const lightbox = useStore((s) => s.pelicanLightbox)
@@ -54,7 +54,7 @@ export function PelicanLightbox() {
     for (const cred of credentials) {
       if (isManuallyExcluded(cred)) continue
       const t = targetByCred.get(cred.id)
-      const svgRound = latestPelicanSvgRound(t)
+      const svgRound = latestPelicanArtworkRound(t)
       if (svgRound) {
         const judged =
           svgRound.evidence.pelican?.judgedVerdict ??
@@ -75,7 +75,7 @@ export function PelicanLightbox() {
     }
     return (
       targets.find((t) => t.credentialId === effectiveLightbox.credentialId && t.model === settings.inspectionModel) ??
-      targets.find((t) => t.credentialId === effectiveLightbox.credentialId && Boolean(latestPelicanSvgRound(t))) ??
+      targets.find((t) => t.credentialId === effectiveLightbox.credentialId && Boolean(latestPelicanArtworkRound(t))) ??
       null
     )
   }, [effectiveLightbox, targets, settings.inspectionModel])
@@ -88,7 +88,7 @@ export function PelicanLightbox() {
       )
       if (found) return found
     }
-    return latestPelicanSvgRound(activeTarget)
+    return latestPelicanArtworkRound(activeTarget)
   }, [effectiveLightbox, activeTarget])
 
   const credential = effectiveLightbox ? credentials.find((c) => c.id === effectiveLightbox.credentialId) : undefined
@@ -145,7 +145,7 @@ export function PelicanLightbox() {
     (verdict: 'normal' | 'downshift') => {
       if (!canJudge || !credential || !activeRound || !activeTarget) return
       const wasUnjudged = judgedVerdict === null
-      // Auto-advance to the next unjudged artwork in cyclic order for rapid triage flow.
+      // 保存成功且用户仍停留于原画作时，按循环顺序流转到下一幅待判画作。
       let nextUnjudged: { credentialId: string; roundId: string } | null = null
       if (wasUnjudged && galleryEntries.length > 1 && galleryIndex >= 0) {
         for (let offset = 1; offset < galleryEntries.length; offset += 1) {
@@ -254,7 +254,7 @@ export function PelicanLightbox() {
           {activeRound.evidence.usage && (
             <span>· {activeRound.evidence.usage.outputTokens.toLocaleString('zh-CN')} tok</span>
           )}
-          <span>· {formatSvgBytes(pelicanByteCount(pelican))}</span>
+          <span>· {formatPelicanBytes(pelicanByteCount(pelican))}</span>
           {!pelican.strictFormat && <span className="pelican-sub-warn">· 宽容提取</span>}
         </span>
       }

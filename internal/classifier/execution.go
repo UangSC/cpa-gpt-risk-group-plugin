@@ -201,7 +201,7 @@ challengeLoop:
 					answer := truncateAnswer(reply.Answer)
 					preview := compactAnswerPreview(answer)
 					matched := MatchesCandy(answer)
-					round.Evidence.Candy = &Candy{candyPromptID, CandyQuestion, candyExpectedAnswer, answer, matched, fmt.Sprintf("接受含独立数字 %s 的回答；子串和小数不计入。", candyExpectedAnswer)}
+					round.Evidence.Candy = &Candy{"candy-bag-21", CandyQuestion, "21", answer, matched, "接受含独立数字 21 的回答；子串和小数不计入。"}
 					if matched {
 						round.Outcome, round.ReasonCode, round.Reason = "normal", "all-tests-passed", fmt.Sprintf("糖果题答案正确：%s", preview)
 						if retries > 0 {

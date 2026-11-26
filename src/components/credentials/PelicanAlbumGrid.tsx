@@ -17,14 +17,14 @@ import {
   type CredentialRuntime,
 } from './CredentialParts'
 import {
-  PelicanSvgFrame,
   downloadPelicanHtml,
-  formatSvgBytes,
+  formatPelicanBytes,
   hasPelicanArtwork,
   latestPelicanRound,
-  latestPelicanSvgRound,
+  latestPelicanArtworkRound,
   pelicanByteCount,
-} from '../pelican/PelicanSvgStage'
+} from '../../lib/pelican'
+import { PelicanSvgFrame } from '../pelican/PelicanSvgStage'
 
 const WINDOW_SHORT: Record<string, string> = {
   '5h': '5h',
@@ -112,7 +112,7 @@ export function PelicanAlbumGrid({
         const quotaRefreshing = !isDisabled && runtime.quotaRefreshingIds.has(credential.id)
         const isJudging = judgingIds.has(credential.id)
 
-        const svgRound = latestPelicanSvgRound(view.target)
+        const svgRound = latestPelicanArtworkRound(view.target)
         const pelicanRound = latestPelicanRound(view.target)
         const pelicanData = svgRound?.evidence.pelican
         const hasArtwork = hasPelicanArtwork(pelicanData)
@@ -398,7 +398,7 @@ export function PelicanAlbumGrid({
                     placement="top"
                     content={
                       svgRound
-                        ? `耗时 ${formatDuration(svgRound.evidence.durationMs)} · ${formatSvgBytes(artworkBytes)}${!pelicanData?.strictFormat ? ' · 宽容提取' : ''} · 点击查看依据`
+                        ? `耗时 ${formatDuration(svgRound.evidence.durationMs)} · ${formatPelicanBytes(artworkBytes)}${!pelicanData?.strictFormat ? ' · 宽容提取' : ''} · 点击查看依据`
                         : '点击查看请求记录与完整依据'
                     }
                   >

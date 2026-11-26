@@ -17,25 +17,20 @@ const CandyQuestion = `[题目]
 只输出一行，以 {"ANSWER": <唯一答案>}，为输出格式，将答案填入 ANSWER Key 对应的 Value 中，答案必须为正整数，数字使用 0–9，不加前导零，不要输出空格、单位、解释、代码块或其他内容。
 例如输出： {"ANSWER": 10}`
 
-const candyExpectedAnswer = "29"
-const candyPromptID = "candy-bag-29"
-
 // 格式宽容，但排除更长数字、小数及正负数中的子串。
 func MatchesCandy(answer string) bool {
 	r := []rune(answer)
-	expectedLength := len([]rune(candyExpectedAnswer))
-	for i := 0; i+expectedLength <= len(r); i++ {
-		if string(r[i:i+expectedLength]) != candyExpectedAnswer {
+	for i := 0; i+1 < len(r); i++ {
+		if r[i] != '2' || r[i+1] != '1' {
 			continue
 		}
 		numeric := func(c rune) bool { return unicode.IsDigit(c) || c == '.' || c == '+' || c == '-' }
 		if i > 0 && numeric(r[i-1]) {
 			continue
 		}
-		end := i + expectedLength
-		if end < len(r) {
-			next := r[end]
-			if unicode.IsDigit(next) || next == '+' || next == '-' || (next == '.' && end+1 < len(r) && unicode.IsDigit(r[end+1])) {
+		if i+2 < len(r) {
+			next := r[i+2]
+			if unicode.IsDigit(next) || next == '+' || next == '-' || (next == '.' && i+3 < len(r) && unicode.IsDigit(r[i+3])) {
 				continue
 			}
 		}

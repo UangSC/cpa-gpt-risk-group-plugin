@@ -86,7 +86,7 @@ export interface CandyEvidence {
   promptId: string
   /** The question text, kept so the evidence sheet can show exactly what was asked. */
   question: string
-  /** The standalone integer expected by the rule recorded for this round. */
+  /** What a correct answer must contain, e.g. the standalone number `21`. */
   expected: string
   /** Verbatim model answer, already truncated by the backend. */
   answer: string
@@ -99,11 +99,14 @@ export interface CandyEvidence {
 export interface PelicanEvidence {
   promptId: string
   question: string
+  /** 用于沙箱渲染的完整 HTML，已剥离受限资源，旧记录可能仅包含 SVG。 */
   html?: string
   htmlBytes?: number
   svg?: string
   svgBytes: number
+  /** 更早轮次的 HTML、SVG 或无效回复已按保留策略清理。 */
   svgPruned?: boolean
+  /** 兼容字段名，保存最近轮次的无效绘制回复全文。 */
   rawSnippet?: string
   strictFormat: boolean
   formatNote: string
@@ -347,7 +350,7 @@ export interface ScheduleSettings {
   enabled: boolean
   mode: 'interval' | 'daily' | 'windows'
   intervalMinutes: number
-  /** `HH:mm`, local time, only used when `mode === 'daily'`. */
+  /** `HH:mm`，按 Asia/Shanghai 时区执行，仅用于每日计划。 */
   dailyTime: string
   windows: { id: string; startMinute: number; endMinute: number }[]
   /** 定时巡检遇到凭证存在活跃会话时的处理策略。 */

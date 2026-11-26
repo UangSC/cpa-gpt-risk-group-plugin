@@ -34,7 +34,7 @@ func managementRegistration() (any, error) {
 	for _, item := range [][2]string{{"GET", "/snapshot"}, {"POST", "/checks"}, {"POST", "/quota/refresh"}, {"GET", "/tasks"}, {"POST", "/tasks/cancel"}, {"POST", "/sync"}, {"POST", "/verdict"}, {"PUT", "/settings"}, {"PUT", "/routing"}, {"POST", "/exclusions"}, {"PUT", "/status"}, {"POST", "/history/clear"}} {
 		routes = append(routes, map[string]string{"method": item[0], "path": apiPrefix + item[1]})
 	}
-	resources := []map[string]string{{"path": "/ui", "menu": "Codex 风控检测与分类", "description": "Codex 凭证糖果题、模型指纹与画鹈鹕 SVG 巡检、分类及路由管理"}}
+	resources := []map[string]string{{"path": "/ui", "menu": "Codex 风控检测与分类", "description": "Codex 凭证糖果题、模型指纹与鹈鹕 HTML/SVG 动画巡检、人工分组及路由管理"}}
 	err := fs.WalkDir(web.Assets(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

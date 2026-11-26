@@ -90,7 +90,7 @@ export const REASON_LABEL: Record<ReasonCode, string> = {
 export const REASON_DESC: Record<ReasonCode, string> = {
   'all-tests-passed': '本轮所选测试全部通过，未出现需要重试的请求错误。',
   'passed-after-retry': '请求曾出现服务错误或无效回答，但在本轮共用的重试次数内成功；所选测试全部通过。',
-  'candy-mismatch': '模型回答中未出现本轮记录的期望整数，具体判题值见糖果题依据。',
+  'candy-mismatch': '糖果题的正确答案应为 21，模型回答中未出现独立的 21。',
   'fingerprint-anomaly': '三次有效结果中，目标参考未匹配，或目标归因概率未超过本轮阈值。',
   'fingerprint-insufficient': '不足三份有效数字序列，或请求模型尚未登记到参考库，因此本轮保持不确定。',
   'pelican-awaiting-judgment': '已输出鹈鹕骑自行车 HTML 动画，系统不自动更改分组，请观察动画细节后手动点击分组按钮。',

@@ -15,7 +15,7 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 - `config.go` 解析服务器端配置标量，生命周期层负责建立适配器和分类服务。
 - `management.go` 注册固定管理路由，处理认证后的请求并提供嵌入页面资源。
 
-管理密钥只在服务器端使用，不投影到页面快照。异步任务不保存入站请求的临时宿主回调 ID。
+宿主插件配置中的备用管理密钥仅供服务端调用使用，页面快照排除此字段。浏览器通过用户登录的管理密钥访问同源接口。管理请求持有插件生命周期读锁，配置重载等待已进入的请求结束。异步任务通过独立宿主回调执行。
 
 ## CPA 适配：internal/cpa
 
@@ -34,10 +34,10 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 
 - `service.go` 管理服务生命周期、状态加载与迁移。
 - `methods.go` 集中注册各检测方式（`candy`、`fingerprint`、`pelican`）的初始轮次状态、挑战题入口、运行进度文案、错误归因模板与频繁异常累计策略，便于后续扩展新检测方式。
-- `candy.go` 保存糖果题和数字匹配规则；`pelican.go` 保存画鹈鹕 HTML+SVG 动画题目、外部资产剥离清洗与人工分组同步入口。
+- `candy.go` 保存糖果题和预设数字匹配规则。`pelican.go` 负责 HTML/SVG 动画提取、受限资源清理和最近 3 轮内容保留，`pelican_verdict.go` 负责人工判定、分组同步及保存失败回滚。
 - `tasks.go` 管理任务入队、并发、取消与进度。
 - `inspection.go` 检查单凭证资格并保存判定、同步分类；`execution.go` 执行题目和共用的有限重试。
-- `service_errors.go` 按单轮真实请求数或连续失败轮数判定频繁 502/503/429；`quota_refresh.go` 以四个工作协程刷新明确提交的凭证并持久保存额度。
+- `service_errors.go` 为糖果和指纹巡检统计真实 502/503/429 的单轮次数与连续失败轮数。鹈鹕巡检记录请求错误和重试结果，画作分组由人工判定。`quota_refresh.go` 以四个工作协程刷新明确提交的凭证并持久保存额度。
 - `fingerprint.go` 将三次参考归因结果映射为业务判定；`history.go` 只在任务与时间区间唯一匹配时补齐旧历史批次。
 - `settings.go`、`routing.go` 处理设置和凭证路由操作。
 - `state.go` 负责原子保存和状态辅助函数；`snapshot.go` 生成页面所需的真实状态。
@@ -45,7 +45,7 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 - `exclusions.go` 管理不参与巡检的凭证、Free 套餐默认跳过判定（`InspectFreeAccounts`）与 CPA 凭证启停状态同步（`SetCredentialStatus`），保留原分类与历史。
 - `http.go` 处理业务 API，`types.go` 定义持久化与页面契约。
 
-新增检测方法时，应同时明确题目、答案判定、重试条件、历史证据以及计划授权指纹。新参数不能只保存在页面草稿中；后台每轮任务应冻结配置供全部重试复用。
+维护现有检测方法时，逐字保留糖果、指纹、鹈鹕的提示词和预设答案。新增检测方法应明确题目、答案判定、重试条件、历史证据以及计划授权指纹。后台每轮任务冻结已保存配置，供全部重试复用。
 
 ## 模型指纹：internal/fingerprint
 
@@ -62,12 +62,13 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 - `views/` 负责概览、统计、历史、设置四大主视图的状态编排；`components/` 按职责拆分为六个子目录与顶层全局浮层：
   - `components/overview/`：概览顶栏筛选与健康条、快捷配置浮层、并发步进器、吸顶工具栏与跨页批量操作栏。
   - `components/credentials/`：双栏池、列表、自适应卡片与鹈鹕相册四种凭证布局及共享配额、路由、一键单测部件。
-  - `components/pelican/`：`PelicanSvgStage` 沙箱 `iframe` 渲染与 HTML 下载，在线和下载画布均以前置 CSP 限制外部资源，并隔离动画脚本的同源权限。`PelicanLightbox` 在判定保存成功且仍停留于原画作时流转到下一幅待判画作。
+  - `components/pelican/` 中的 `PelicanSvgStage` 挂载沙箱 `iframe` 并管理延迟加载。`PelicanLightbox` 在判定保存成功且仍停留于原画作时流转到下一幅待判画作。
   - `components/evidence/`：`EvidenceSheet` 判定依据弹窗及糖果题、模型指纹、画鹈鹕（含折叠 HTML/SVG 源码、一键复制和沙箱 HTML 下载）、请求重试与分组同步子面板。
   - `components/settings/`：分组前缀、优先级、检测方式、巡检模型、额度门槛、重试规则、请求头覆盖、定时巡检、分页与历史清理面板。
   - `components/ui/`：按钮、滑块胶囊指示器（`useSlidingIndicator`）、自定义下拉、折叠面板、模态框、悬浮提示（`HoverCard`）与跨页区间选择上下文（`SelectionProvider`）。
 - `lib/historyBatches.ts` 根据轮次 `taskId` 与 `batchStartedAt` 归批，历史和任务面板共享折叠组件。旧记录只在可靠任务身份和时间区间唯一匹配时归并；折叠时不挂载大量凭证条目。
-- `inspection/` 描述可展示的检测方式与题数，`lib/` 保存格式化、分页、路由和交互纯函数。
+- `lib/pelican.ts` 统一定位最新画作、统计字节数、构造预览文档和下载 HTML，供相册、依据面板、排序和动作层复用。预览与下载画布均以前置 CSP 限制外部资源，并隔离动画脚本的同源权限。
+- `inspection/` 描述可展示的检测方式与题数，`lib/` 保存格式化、分页、路由和交互辅助函数。
 - `styles/` 按职责拆分为 `tokens.css`（设计令牌）、`base.css`（壳层与导航）、`controls.css`（通用表单与控件）、`feedback.css`（通知与提示）、`badges.css`（套餐徽标）、`overview.css`（概览控制栏与分页）、`credentials.css`（凭证布局与实时活动条）、`overlays.css`（弹窗与抽屉）、`views.css`（统计/历史/设置）与 `pelican.css`（鹈鹕相册与审片台）。
 
 添加页面操作时，先扩展 `api/` 契约，再由动作层管理等待、失败与刷新，最后在组件中展示。异步返回不得覆盖更新后的来源或用户仍在编辑的设置草稿。

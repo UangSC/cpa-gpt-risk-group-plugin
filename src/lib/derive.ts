@@ -9,6 +9,7 @@
 
 import type { Credential, InspectionRound, Settings, Target, Verdict } from '../types'
 import { buildModelName, stripGroupPrefix } from './prefix'
+import { latestPelicanArtworkRound, latestPelicanRound } from './pelican'
 
 export interface CredentialView {
   credential: Credential
@@ -215,9 +216,8 @@ export function sortPelicanViews(
 ): CredentialView[] {
   return views
     .map((view) => {
-      const rounds = view.target?.rounds ?? []
-      const svgRound = rounds.find((round) => Boolean(round.evidence.pelican?.html || round.evidence.pelican?.svg))
-      const pelicanRound = rounds.find((round) => Boolean(round.evidence.pelican) || round.tests.includes('pelican'))
+      const svgRound = latestPelicanArtworkRound(view.target)
+      const pelicanRound = latestPelicanRound(view.target)
       let rank = 3
       let ts = 0
       if (svgRound) {
