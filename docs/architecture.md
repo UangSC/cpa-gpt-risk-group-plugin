@@ -62,7 +62,7 @@ React 页面 → 插件管理 API → 分类服务 → CPA 官方宿主与管理
 - `views/` 负责概览、统计、历史、设置四大主视图的状态编排；`components/` 按职责拆分为六个子目录与顶层全局浮层：
   - `components/overview/`：概览顶栏筛选与健康条、快捷配置浮层、并发步进器、吸顶工具栏与跨页批量操作栏。
   - `components/credentials/`：双栏池、列表、自适应卡片与鹈鹕相册四种凭证布局及共享配额、路由、一键单测部件。
-  - `components/pelican/` 中的 `PelicanSvgStage` 挂载沙箱 `iframe` 并管理延迟加载。`PelicanLightbox` 在判定保存成功且仍停留于原画作时流转到下一幅待判画作。
+  - `components/pelican/` 中的 `PelicanSvgStage` 挂载沙箱 `iframe` 并管理延迟加载。相册使用 `SelectableCard` 处理卡片与图片点击选择，独立“放大 SVG”按钮打开 `PelicanLightbox`。大图窗口在判定保存成功且仍停留于原画作时流转到下一幅待判画作。
   - `components/evidence/`：`EvidenceSheet` 判定依据弹窗及糖果题、模型指纹、画鹈鹕（含折叠 HTML/SVG 源码、一键复制和沙箱 HTML 下载）、请求重试与分组同步子面板。
   - `components/settings/`：分组前缀、优先级、检测方式、巡检模型、额度门槛、重试规则、请求头覆盖、定时巡检、分页与历史清理面板。
   - `components/ui/`：按钮、滑块胶囊指示器（`useSlidingIndicator`）、自定义下拉、折叠面板、模态框、悬浮提示（`HoverCard`）与跨页区间选择上下文（`SelectionProvider`）。

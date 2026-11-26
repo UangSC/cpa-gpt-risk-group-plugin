@@ -25,6 +25,7 @@ import {
   pelicanByteCount,
 } from '../../lib/pelican'
 import { PelicanSvgFrame } from '../pelican/PelicanSvgStage'
+import { SelectableCard } from './SelectableCard'
 
 const WINDOW_SHORT: Record<string, string> = {
   '5h': '5h',
@@ -205,12 +206,14 @@ export function PelicanAlbumGrid({
         ) : null
 
         return (
-          <article
+          <SelectableCard
             key={credential.id}
-            data-testid={`pelican-card-${credential.id}`}
-            data-credential-id={credential.id}
-            data-exclusion-source={!isDisabled ? 'true' : undefined}
-            className={`pelican-album-card${judgedVerdict ? ` tone-${judgedVerdict}` : hasArtwork ? ' tone-awaiting' : ''}${selected ? ' is-selected' : ''}${isDisabled ? ' is-disabled-cred' : ''}${activity ? ` is-active is-${activity.kind}` : ''}`}
+            testId={`pelican-card-${credential.id}`}
+            credentialId={credential.id}
+            selected={selected}
+            disabled={isDisabled}
+            onToggle={(shiftKey) => selection.toggle(credential.id, shiftKey)}
+            className={`pelican-album-card${judgedVerdict ? ` tone-${judgedVerdict}` : hasArtwork ? ' tone-awaiting' : ''}${activity ? ` is-active is-${activity.kind}` : ''}`}
           >
             <ActivityRail activity={activity} />
 
@@ -284,12 +287,7 @@ export function PelicanAlbumGrid({
 
               {hasArtwork ? (
                 <>
-                  <button
-                    type="button"
-                    className="pelican-stage-hit"
-                    onClick={() => openPelicanLightbox(credential.id, svgRound?.id ?? null)}
-                    aria-label={`点击放大审看 ${credential.name} 的鹈鹕骑自行车动画`}
-                  >
+                  <div className="pelican-stage-hit">
                     <span className="pelican-artwork-mat">
                       <PelicanSvgFrame
                         html={pelicanData?.html}
@@ -298,10 +296,17 @@ export function PelicanAlbumGrid({
                         title={`${credential.name} 鹈鹕骑自行车动画`}
                       />
                     </span>
-                    <span className="pelican-zoom-cue" aria-hidden="true">
-                      <Icon.Expand />
-                      <span>大图审片</span>
-                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="pelican-expand-btn"
+                    onClick={(event) => {
+                      stop(event)
+                      openPelicanLightbox(credential.id, svgRound?.id ?? null)
+                    }}
+                  >
+                    <Icon.Expand />
+                    <span>放大 SVG</span>
                   </button>
                   {activity && (
                     <div className="pelican-stage-redraw-banner" role="status">
@@ -346,21 +351,22 @@ export function PelicanAlbumGrid({
                   )}
                 </div>
               ) : canDraw && view.target ? (
-                <button
-                  type="button"
-                  className="pelican-stage-empty is-clickable-easel"
-                  onClick={(event) => {
-                    stop(event)
-                    void startInspection('manual', [view.target!.id])
-                  }}
-                  aria-label={`开始为 ${credential.name} 绘制鹈鹕骑自行车动画`}
-                >
+                <div className="pelican-stage-empty">
                   <span className="pelican-empty-emblem">
                     <Icon.PelicanBike />
                   </span>
-                  <strong>点击开始绘制鹈鹕动画</strong>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={(event) => {
+                      stop(event)
+                      void startInspection('manual', [view.target!.id])
+                    }}
+                  >
+                    开始绘制鹈鹕动画
+                  </button>
                   <span>生成后可在线审片、下载 HTML 并快速判别风控</span>
-                </button>
+                </div>
               ) : (
                 <div className="pelican-stage-empty">
                   <div className="pelican-empty-emblem">
@@ -379,12 +385,7 @@ export function PelicanAlbumGrid({
             </div>
 
             {/* Zone 2: Selectable Identity, Priority/Weight + Status Badge */}
-            <div
-              className="pelican-caption"
-              onClick={(event) => {
-                if (!isDisabled) selection.toggle(credential.id, event.shiftKey)
-              }}
-            >
+            <div className="pelican-caption">
               <div className="pelican-caption-row">
                 <div className="pelican-ident">
                   <SecretName name={credential.name} className="pelican-cred-name" />
@@ -440,10 +441,10 @@ export function PelicanAlbumGrid({
             </div>
 
             {/* Zone 3: Balanced 3-Column Footer with Bottom-Centered Plan Badge */}
-            <div className="pelican-action-bar" onClick={stop}>
+            <div className="pelican-action-bar">
               <div className="pelican-action-left">
                 {hasArtwork ? (
-                  <div className="pelican-verdict-switch" role="group" aria-label="肉眼判定风控分组">
+                  <div className="pelican-verdict-switch" role="group" aria-label="肉眼判定风控分组" onClick={stop}>
                     <HoverCard compact placement="top" content={`判为正常 · ${routingModeHint}`}>
                       <button
                         type="button"
@@ -490,7 +491,7 @@ export function PelicanAlbumGrid({
                 <Actions view={view} runtime={runtime} mode="card" compact />
               </div>
             </div>
-          </article>
+          </SelectableCard>
         )
       })}
     </div>

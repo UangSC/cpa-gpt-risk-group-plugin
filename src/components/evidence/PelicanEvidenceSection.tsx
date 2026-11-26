@@ -104,26 +104,14 @@ export function PelicanEvidenceSection({
 
       {hasArtwork ? (
         <>
-          <div
-            className="ev-pelican-preview"
-            role="button"
-            tabIndex={0}
-            aria-label="点击放大审看鹈鹕动画"
-            onClick={onOpenLightbox}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                onOpenLightbox()
-              }
-            }}
-          >
+          <div className="ev-pelican-preview">
             <PelicanSvgFrame html={pelican.html} svg={pelican.svg ?? ''} title="本轮鹈鹕动画" lazy={false} />
           </div>
           <div className="ev-pelican-bar">
             <div className="inline" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-sm" onClick={onOpenLightbox}>
+              <button type="button" className="btn" onClick={onOpenLightbox}>
                 <Icon.Expand />
-                <span>大图审片</span>
+                <span>放大 SVG</span>
               </button>
               <button type="button" className="btn btn-sm" onClick={handleDownload}>
                 <Icon.Download />
